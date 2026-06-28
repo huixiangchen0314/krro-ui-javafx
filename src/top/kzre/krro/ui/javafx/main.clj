@@ -31,6 +31,10 @@
 
       (mode/fundamental-activate!)      ;; 触发 render-layout!
 
+      (cmd/register-command! :krro.command/update-path
+                             (fn [proj path new-val]
+                               (assoc-in proj path new-val))
+                             :description "通用路径更新命令，用于双向绑定")
       (cmd/register-command! :krro.command/hello
                              (fn [proj] (msg/message "Hello from Krrō!") proj)
                              :description "Say hello")

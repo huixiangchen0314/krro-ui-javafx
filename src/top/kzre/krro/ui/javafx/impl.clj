@@ -41,7 +41,7 @@
     (let [tag (proto/node-type vnode)
           props (proto/node-props vnode)
           context {:execute-command (fn [cmd-id & args] (apply cmd/execute-command! cmd-id args))}
-          node (tags/render-tag tag props context)]
+          node (tags/create-element tag props context)]
       (apply-common-attrs node props)
       node))
   (update-properties [_ element old-props new-props]
