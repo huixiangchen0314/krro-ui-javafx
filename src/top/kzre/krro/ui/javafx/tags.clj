@@ -1,19 +1,39 @@
 (ns top.kzre.krro.ui.javafx.tags
   "JavaFX 标签渲染多方法。不再传递 parent 参数。"
-  (:require [top.kzre.krro.core.command :as cmd]
-            [top.kzre.krro.core.project :as proj])
-  (:import [javafx.scene.control Button CheckBox ColorPicker ComboBox Label
-                                 Labeled MenuBar Menu MenuItem Separator Slider TextArea TextField ToolBar]
-           [javafx.scene.layout HBox VBox Priority]
-           [javafx.event EventHandler]
-           [javafx.scene Node]))
+  (:require
+    [top.kzre.krro.core.command :as cmd]
+    [top.kzre.krro.core.project :as proj]
+    [top.kzre.krro.ui.javafx.bind :as bind])
+  (:import
+    (javafx.application Platform)
+    (javafx.beans.value ChangeListener)
+    (javafx.event EventHandler)
+    (javafx.scene Node)
+    (javafx.scene.control
+      Button
+      CheckBox
+      ColorPicker
+      ComboBox
+      Label
+      Labeled
+      Menu
+      MenuBar
+      MenuItem
+      Separator
+      Slider
+      TextArea
+      TextField
+      ToolBar)
+    (javafx.scene.layout HBox VBox)))
 
+;; ── 样式工具 ──────────────────────────────────
 (defn- apply-style [^Node node style]
   (let [css-str (->> (for [[k v] style]
                        (str "-fx-" (name k) ": " v ";"))
                      (clojure.string/join " "))]
     (.setStyle node css-str)))
 
+;; ── 属性更新函数（供 diff 使用） ─────────────────
 (defn update-attrs [^Node node old-attrs new-attrs]
   ;; 更新样式
   (let [old-style (:style old-attrs)
@@ -44,8 +64,7 @@
   (when (contains? attrs :disabled?) (.setDisable node (boolean (:disabled? attrs))))
   node)
 
-
-
+;; ── 命令事件绑定工具 ──────────────────────────────
 (defn bind-command [^Node node attrs]
   (when-let [cmd-id (:on-command attrs)]
     (.setOnAction node
@@ -76,6 +95,8 @@
 (defmethod render-tag :label [[_ attrs] _]
   (let [lbl (Label. (or (:text attrs) ""))]
     (apply-common-attrs lbl attrs)
+    (when-let [path (:bind attrs)]
+      (bind/register-binding lbl path))
     lbl))
 
 (defmethod render-tag :button [[_ attrs] _]
@@ -87,26 +108,33 @@
 (defmethod render-tag :text-field [[_ attrs] _]
   (let [tf (TextField. (or (:text attrs) ""))]
     (apply-common-attrs tf attrs)
+    (when-let [path (:bind attrs)]
+      (bind/register-binding tf path))
     (when-let [cmd-id (:on-command attrs)]
       (.setOnAction tf
                     (reify EventHandler
                       (handle [this event]
-                        (cmd/execute-command! cmd-id (:command-args attrs))))))
+                        (cmd/execute-command! cmd-id (.getText tf))))))
     tf))
 
 (defmethod render-tag :text-area [[_ attrs] _]
   (let [ta (TextArea. (or (:text attrs) ""))]
     (apply-common-attrs ta attrs)
+    (when-let [path (:bind attrs)]
+      (bind/register-binding ta path))
     ta))
 
-(defmethod render-tag :checkbox [[_ attrs] _]
+(defmethod render-tag :check-box [[_ attrs] _]
   (let [cb (CheckBox. (or (:text attrs) ""))]
     (apply-common-attrs cb attrs)
+    (when-let [selected? (:selected attrs)] (.setSelected cb (boolean selected?)))
+    (when-let [path (:bind attrs)]
+      (bind/register-binding cb path))
     (when-let [cmd-id (:on-command attrs)]
       (.setOnAction cb
                     (reify EventHandler
                       (handle [this event]
-                        (cmd/execute-command! cmd-id (:command-args attrs))))))
+                        (cmd/execute-command! cmd-id (.isSelected cb))))))
     cb))
 
 (defmethod render-tag :slider [[_ attrs] _]
@@ -114,6 +142,13 @@
                     (double (or (:max attrs) 100))
                     (double (or (:value attrs) 50)))]
     (apply-common-attrs sl attrs)
+    (when-let [path (:bind attrs)]
+      (bind/register-binding sl path))
+    (when-let [cmd-id (:on-command attrs)]
+      (.addListener (.valueProperty sl)
+                    (proxy [ChangeListener] []
+                      (changed [obs old new]
+                        (cmd/execute-command! cmd-id new)))))
     sl))
 
 (defmethod render-tag :combo-box [[_ attrs] _]
@@ -121,6 +156,13 @@
     (apply-common-attrs cb attrs)
     (when-let [items (:items attrs)] (.addAll (.getItems cb) items))
     (when-let [val (:value attrs)] (.setValue cb val))
+    (when-let [path (:bind attrs)]
+      (bind/register-binding cb path))
+    (when-let [cmd-id (:on-command attrs)]
+      (.setOnAction cb
+                    (reify EventHandler
+                      (handle [this event]
+                        (cmd/execute-command! cmd-id (.getValue cb))))))
     cb))
 
 (defmethod render-tag :color-picker [[_ attrs] _]
