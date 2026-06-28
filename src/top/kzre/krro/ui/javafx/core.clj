@@ -62,9 +62,11 @@
   [init-fn]
   (Platform/startup
     (fn []
+      ;; 在 launch-app 中
       (let [{:keys [root-pane]} (create-stage)
             factory (impl/->JavaFxElementFactory)
-            node-renderer (impl/->JavaFxRenderer root-pane)
-            krro-renderer (renderer/->JavaFxRenderer root-pane factory node-renderer)]
-        (ui/set-renderer! krro-renderer)    ;; 安装到内核，模式系统将使用此渲染器
+            node-renderer (impl/->JavaFxNodeRenderer)
+            old-vnode (atom nil)
+            krro-renderer (renderer/->JavaFxRenderer root-pane factory node-renderer old-vnode)]
+        (ui/set-renderer! krro-renderer)
         (init-fn factory krro-renderer root-pane)))))
