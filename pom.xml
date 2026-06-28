@@ -24,6 +24,11 @@
             <artifactId>krro-core</artifactId>
             <version>0.1.0</version>
         </dependency>
+        <dependency>
+            <groupId>top.kzre</groupId>
+            <artifactId>krro-ui-core</artifactId>
+            <version>0.1.0</version>
+        </dependency>
         <!-- JavaFX dependencies matching deps.edn -->
         <dependency>
             <groupId>org.openjfx</groupId>

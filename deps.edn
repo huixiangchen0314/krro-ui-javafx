@@ -7,7 +7,7 @@
 
         ;; Krrō 核心
         top.kzre/krro-core {:mvn/version "0.1.0"}
-
+        top.kzre/krro-ui-core {:mvn/version "0.1.0"}
         }
 
  :aliases
