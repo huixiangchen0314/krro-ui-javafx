@@ -1,15 +1,19 @@
 (ns top.kzre.krro.ui.javafx.core
-  "Krrō JavaFX 入口，管理窗口、交互器、状态栏和渲染器安装。"
-  (:require [top.kzre.krro.core.interactive :as i]
+  "Krrō JavaFX 入口，管理窗口、交互器、状态栏、渲染器和 Frame。"
+  (:require [top.kzre.krro.core.project :as proj]
+            [top.kzre.krro.ui.javafx.plugin]
+            [top.kzre.krro.core.interactive :as i]
             [top.kzre.krro.core.message :as msg]
             [top.kzre.krro.core.ui.protocol :as ui]
+            [top.kzre.krro.ui.javafx.renderer :as renderer]
             [top.kzre.krro.ui.javafx.impl :as impl]
-            [top.kzre.krro.ui.javafx.renderer :as renderer])
-  (:import (javafx.application Platform)
-           (javafx.scene Scene)
-           (javafx.scene.control ChoiceDialog Label TextInputDialog)
-           (javafx.scene.layout BorderPane VBox)
-           (javafx.stage Stage)))
+            [top.kzre.krro.core.frame :as frame])
+  (:import [javafx.application Platform]
+           [javafx.scene Scene]
+           [javafx.scene.control Label TextInputDialog ChoiceDialog]
+           [javafx.scene.layout BorderPane VBox]
+           [javafx.stage Stage]
+           [javafx.event EventHandler]))
 
 ;; ── 交互器实现 ───────────────────────────────────────────
 (defrecord JavaFxInteractor []
@@ -43,6 +47,7 @@
 
 ;; ── 主舞台创建 ──────────────────────────────────────────
 (defn create-stage
+  "创建并显示 Krrō 主舞台。返回 {:keys [stage root-pane]}。"
   [& {:keys [width height title]
       :or {width 1024 height 768 title "Krrō"}}]
   (let [root (BorderPane.)
@@ -58,15 +63,20 @@
 
 ;; ── 启动辅助 ────────────────────────────────────────────
 (defn launch-app
-  "启动 JavaFX 并执行初始化回调。"
+  "启动 JavaFX 并执行初始化回调。
+   回调接收 factory, renderer, root-pane 以及当前 Frame。"
   [init-fn]
   (Platform/startup
     (fn []
-      ;; 在 launch-app 中
+      (proj/init-project!)
+      (i/set-interactor! (->JavaFxInteractor))
       (let [{:keys [root-pane]} (create-stage)
             factory (impl/->JavaFxElementFactory)
             node-renderer (impl/->JavaFxNodeRenderer)
-            old-vnode (atom nil)
-            krro-renderer (renderer/->JavaFxRenderer root-pane factory node-renderer old-vnode)]
-        (ui/set-renderer! krro-renderer)
-        (init-fn factory krro-renderer root-pane)))))
+            f (frame/create-frame :id :main)]
+        ;; 设置全局当前 Frame
+        (alter-var-root #'frame/*current-frame* (constantly f))
+        ;; 创建渲染器（初始无旧 VNode）
+        (let [krro-renderer (renderer/->JavaFxRenderer root-pane factory node-renderer (atom nil))]
+          (ui/set-renderer! krro-renderer)
+          (init-fn factory krro-renderer root-pane f))))))

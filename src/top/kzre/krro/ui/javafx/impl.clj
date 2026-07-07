@@ -1,12 +1,13 @@
 (ns top.kzre.krro.ui.javafx.impl
-  "JavaFX 平台实现：元素工厂与节点渲染器。适配层，调用 tags 创建节点，处理通用属性。"
+  "JavaFX 平台实现：元素工厂与节点渲染器。适配层，调用 tags 创建节点，处理通用属性。
+   多方法根据容器类型的全限定名字符串进行分派，避免编译期加载 JavaFX 类。"
   (:require [clojure.string :as str]
-            [top.kzre.krro.core.command :as cmd]
             [top.kzre.krro.ui.core.protocol :as proto]
             [top.kzre.krro.ui.javafx.tags :as tags])
   (:import [javafx.scene Node Parent]
            [javafx.scene.control Label TextField]))
 
+;; ── 通用属性处理 ──────────────────────────────────────
 (defn- apply-style [^Node node style-map]
   (when style-map
     (let [css-str (->> (for [[k v] style-map]
@@ -35,39 +36,130 @@
   (when (and (instance? TextField node) (not= (:content old-props) (:content new-props)))
     (.setText ^TextField node (or (:content new-props) ""))))
 
+;; ── 元素工厂 ────────────────────────────────────────
 (defrecord JavaFxElementFactory []
   proto/IElementFactory
   (create-element [_ vnode]
-    (let [tag (proto/node-type vnode)
+    (let [tag   (proto/node-type vnode)
           props (proto/node-props vnode)
-          context {:execute-command (fn [cmd-id & args] (apply cmd/execute-command! cmd-id args))}
-          node (tags/create-element tag props context)]
-      (apply-common-attrs node props)
-      node))
+          result (tags/create-element tag props)]
+      (if (map? result)                        ;; 方案2：返回 map
+        (let [^Node node (:node result)
+              hooks (:hooks result)]
+          (apply-common-attrs node props)
+          (when hooks                           ;; 注册所有钩子
+            (doseq [[k f] hooks]
+              (proto/add-hook! vnode k f)))
+          node)
+        ;; 传统方式：直接返回节点
+        (let [^Node node result]
+          (apply-common-attrs node props)
+          node))))
   (update-properties [_ element old-props new-props]
     (update-attrs element old-props new-props)))
 
+;; ── 多方法：根据容器类型的全限定字符串分派 ─────────
+(defmulti append-node  (fn [parent child]          (when parent (.getName (class parent)))))
+(defmulti insert-node  (fn [parent child index]    (when parent (.getName (class parent)))))
+(defmulti remove-node  (fn [parent child]          (when parent (.getName (class parent)))))
+(defmulti replace-node (fn [parent old new]        (when parent (.getName (class parent)))))
+(defmulti move-node    (fn [parent child target]   (when parent (.getName (class parent)))))
+
+;; 默认实现（普通 Parent / Pane）
+(defmethod append-node :default [parent child]
+  (.add (.getChildren parent) child))
+(defmethod insert-node :default [parent child index]
+  (.add (.getChildren parent) index child))
+(defmethod remove-node :default [parent child]
+  (.remove (.getChildren parent) child))
+(defmethod replace-node :default [parent old new]
+  (let [children (.getChildren parent)
+        idx (.indexOf children old)]
+    (when (>= idx 0) (.set children idx new))))
+(defmethod move-node :default [parent child target-index]
+  (let [children (.getChildren parent)
+        idx (.indexOf children child)]
+    (when (and (>= idx 0) (not= idx target-index))
+      (.remove children child)
+      (.add children target-index child))))
+
+;; MenuBar
+(defmethod append-node "javafx.scene.control.MenuBar" [parent child]
+  (.add (.getMenus parent) child))
+(defmethod insert-node "javafx.scene.control.MenuBar" [parent child index]
+  (.add (.getMenus parent) index child))
+(defmethod remove-node "javafx.scene.control.MenuBar" [parent child]
+  (.remove (.getMenus parent) child))
+(defmethod replace-node "javafx.scene.control.MenuBar" [parent old new]
+  (let [items (.getMenus parent)
+        idx (.indexOf items old)]
+    (when (>= idx 0) (.set items idx new))))
+(defmethod move-node "javafx.scene.control.MenuBar" [parent child target-index]
+  (let [items (.getMenus parent)
+        idx (.indexOf items child)]
+    (when (and (>= idx 0) (not= idx target-index))
+      (.remove items child)
+      (.add items target-index child))))
+
+;; Menu
+(defmethod append-node "javafx.scene.control.Menu" [parent child]
+  (.add (.getItems parent) child))
+(defmethod insert-node "javafx.scene.control.Menu" [parent child index]
+  (.add (.getItems parent) index child))
+(defmethod remove-node "javafx.scene.control.Menu" [parent child]
+  (.remove (.getItems parent) child))
+(defmethod replace-node "javafx.scene.control.Menu" [parent old new]
+  (let [items (.getItems parent)
+        idx (.indexOf items old)]
+    (when (>= idx 0) (.set items idx new))))
+(defmethod move-node "javafx.scene.control.Menu" [parent child target-index]
+  (let [items (.getItems parent)
+        idx (.indexOf items child)]
+    (when (and (>= idx 0) (not= idx target-index))
+      (.remove items child)
+      (.add items target-index child))))
+
+;; ToolBar
+(defmethod append-node "javafx.scene.control.ToolBar" [parent child]
+  (.add (.getItems parent) child))
+(defmethod insert-node "javafx.scene.control.ToolBar" [parent child index]
+  (.add (.getItems parent) index child))
+(defmethod remove-node "javafx.scene.control.ToolBar" [parent child]
+  (.remove (.getItems parent) child))
+(defmethod replace-node "javafx.scene.control.ToolBar" [parent old new]
+  (let [items (.getItems parent)
+        idx (.indexOf items old)]
+    (when (>= idx 0) (.set items idx new))))
+(defmethod move-node "javafx.scene.control.ToolBar" [parent child target-index]
+  (let [items (.getItems parent)
+        idx (.indexOf items child)]
+    (when (and (>= idx 0) (not= idx target-index))
+      (.remove items child)
+      (.add items target-index child))))
+
+;; TabPane
+(defmethod append-node "javafx.scene.control.TabPane" [parent child]
+  (.add (.getTabs parent) child))
+(defmethod insert-node "javafx.scene.control.TabPane" [parent child index]
+  (.add (.getTabs parent) index child))
+(defmethod remove-node "javafx.scene.control.TabPane" [parent child]
+  (.remove (.getTabs parent) child))
+(defmethod replace-node "javafx.scene.control.TabPane" [parent old new]
+  (let [tabs (.getTabs parent)
+        idx (.indexOf tabs old)]
+    (when (>= idx 0) (.set tabs idx new))))
+(defmethod move-node "javafx.scene.control.TabPane" [parent child target-index]
+  (let [tabs (.getTabs parent)
+        idx (.indexOf tabs child)]
+    (when (and (>= idx 0) (not= idx target-index))
+      (.remove tabs child)
+      (.add tabs target-index child))))
+
+;; ── 节点操作渲染器（krro-ui-core 的 IRenderer）────────
 (defrecord JavaFxNodeRenderer []
   proto/IRenderer
-  (append-child [_ parent child]
-    (when (instance? Parent parent)
-      (.add (.getChildren ^Parent parent) child)))
-  (insert-child [_ parent child index]
-    (when (instance? Parent parent)
-      (.add (.getChildren ^Parent parent) index child)))
-  (remove-child [_ parent child]
-    (when (instance? Parent parent)
-      (.remove (.getChildren ^Parent parent) child)))
-  (replace-child [_ parent old-child new-child]
-    (when (instance? Parent parent)
-      (let [children (.getChildren ^Parent parent)
-            idx (.indexOf children old-child)]
-        (when (>= idx 0)
-          (.set children idx new-child)))))
-  (move-child [_ parent child target-index]
-    (when (instance? Parent parent)
-      (let [children (.getChildren ^Parent parent)
-            current-idx (.indexOf children child)]
-        (when (and (>= current-idx 0) (not= current-idx target-index))
-          (.remove children child)
-          (.add children target-index child))))))
+  (append-child [_ parent child]       (append-node parent child))
+  (insert-child [_ parent child index] (insert-node parent child index))
+  (remove-child [_ parent child]       (remove-node parent child))
+  (replace-child [_ parent old new]    (replace-node parent old new))
+  (move-child [_ parent child idx]     (move-node parent child idx)))

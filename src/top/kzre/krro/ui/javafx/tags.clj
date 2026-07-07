@@ -1,7 +1,10 @@
 (ns top.kzre.krro.ui.javafx.tags
   "JavaFX 标签多方法。每个标签只创建对应的平台节点，绑定数据与事件。
-   不处理子节点挂载（由 diff 引擎负责）。"
-  (:require [top.kzre.krro.ui.core.bind :as bind])
+   输入控件自动实现双向绑定（直接 swap!），按钮等支持 :on :click 命令或函数。
+   签名：[tag props]，不再传递 context。"
+  (:require [top.kzre.krro.ui.core.bind :as bind]
+            [top.kzre.krro.core.project :as proj]
+            [top.kzre.krro.core.command :as cmd])
   (:import [javafx.beans.value ChangeListener]
            [javafx.event EventHandler]
            [javafx.scene.control Button CheckBox ComboBox ColorPicker Hyperlink Label ListView
@@ -9,7 +12,7 @@
                                  SplitPane Tab TabPane TextArea TextField ToolBar TreeView]
            [javafx.scene.layout GridPane HBox VBox]))
 
-(defmulti create-element (fn [tag _props _context] tag))
+(defmulti create-element (fn [tag _props] tag))
 
 (defn- common-bind-text [node path]
   (bind/register! node path (fn [n v]
@@ -17,136 +20,135 @@
                                 (.setText ^Label n (str v))
                                 (.setText ^TextField n (str v))))))
 
-(defn- auto-change-command
-  "为控件添加默认的 :change 事件，触发路径更新命令。
-   如果 props 已有 :on :change，则不覆盖。"
-  [node props {:keys [execute-command]}]
-  (when (and (:bind props) (not (get-in props [:on :change])))
-    (let [bind-path (:bind props)]
-      (cond
-        (instance? TextField node)
-        (.addListener (.textProperty node)
-                      (proxy [ChangeListener] []
-                        (changed [_ _ new-val]
-                          (execute-command :krro.command/update-path bind-path new-val))))
-        (instance? Slider node)
-        (.addListener (.valueProperty node)
-                      (proxy [ChangeListener] []
-                        (changed [_ _ new-val]
-                          (execute-command :krro.command/update-path bind-path new-val))))
-        (instance? CheckBox node)
-        (.setOnAction node
-                      (reify EventHandler
-                        (handle [_ _]
-                          (execute-command :krro.command/update-path bind-path (.isSelected node)))))
-        (instance? ComboBox node)
-        (.setOnAction node
-                      (reify EventHandler
-                        (handle [_ _]
-                          (execute-command :krro.command/update-path bind-path (.getValue node)))))
-        ;; 其他控件可扩展
-        ))))
+(defn- bind-checkbox [^CheckBox cb path]
+  (bind/register! cb path (fn [c v] (.setSelected c (boolean v)))))
 
-;; ── 布局容器（只创建空容器）───────────────────────────
-(defmethod create-element :block [_ props _]
+(defn- bind-combobox [^ComboBox cb path]
+  (bind/register! cb path (fn [c v] (.setValue c v))))
+
+(defn- bind-slider [^Slider sl path]
+  (bind/register! sl path (fn [s v] (.setValue s (double v)))))
+
+(defn- bind-listview [^ListView lv path]
+  (bind/register! lv path (fn [l v] (when-let [items (:items v)]
+                                      (.clear (.getItems l))
+                                      (.addAll (.getItems l) items)))))
+
+;; ── 动作处理 ──────────────────────────────────────────
+(defn- handle-action
+  "如果 on-spec 是函数则直接调用，如果是关键字则作为命令执行。"
+  [node on-spec]
+  (when on-spec
+    (.setOnAction node
+                  (reify EventHandler
+                    (handle [_ _]
+                      (if (fn? on-spec)
+                        (on-spec node)
+                        (cmd/execute-command! on-spec)))))))
+
+;; ── 布局容器 ──────────────────────────────────────────
+(defmethod create-element :block [_ props]
   (if (= (:direction props :vertical) :vertical) (VBox.) (HBox.)))
 
-(defmethod create-element :split-pane [_ _ _] (SplitPane.))
-(defmethod create-element :scroll [_ _ _] (ScrollPane.))
-(defmethod create-element :tab-panel [_ _ _] (TabPane.))
-(defmethod create-element :tab [_ props _] (Tab. (or (:title props) "")))
-(defmethod create-element :tool-bar [_ _ _] (ToolBar.))
-(defmethod create-element :menu-bar [_ _ _] (MenuBar.))
-(defmethod create-element :menu [_ props _] (Menu. (or (:content props) "")))
+(defmethod create-element :split-pane [_ _] (SplitPane.))
+(defmethod create-element :scroll [_ _] (ScrollPane.))
+(defmethod create-element :tab-panel [_ _] (TabPane.))
+(defmethod create-element :tab [_ props] (Tab. (or (:title props) "")))
+(defmethod create-element :tool-bar [_ _] (ToolBar.))
+(defmethod create-element :menu-bar [_ _] (MenuBar.))
+(defmethod create-element :menu [_ props] (Menu. (or (:content props) "")))
 
-(defmethod create-element :menu-item [_ props {:keys [execute-command]}]
+(defmethod create-element :menu-item [_ props]
   (let [item (MenuItem. (or (:content props) ""))]
-    (when-let [cmd-id (get-in props [:on :click])]
-      (.setOnAction item (reify EventHandler (handle [_ _] (execute-command cmd-id)))))
+    (handle-action item (get-in props [:on :click]))
     item))
 
 ;; ── 基础控件 ──────────────────────────────────────────
-(defmethod create-element :text [_ props _]
+(defmethod create-element :text [_ props]
   (let [lbl (Label. (or (:content props) ""))]
-    (when-let [path (:bind props)]
-      (common-bind-text lbl path))
+    (when-let [path (:bind props)] (common-bind-text lbl path))
     lbl))
 
-(defmethod create-element :button [_ props {:keys [execute-command]}]
+(defmethod create-element :button [_ props]
   (let [btn (Button. (or (:content props) ""))]
-    (when-let [cmd-id (get-in props [:on :click])]
-      (.setOnAction btn (reify EventHandler (handle [_ _] (execute-command cmd-id)))))
+    (handle-action btn (get-in props [:on :click]))
     btn))
 
-(defmethod create-element :input [_ props context]
+(defmethod create-element :input [_ props]
   (let [tf (TextField. (or (:content props) ""))]
-    (when-let [path (:bind props)] (common-bind-text tf path))
-    (if-let [cmd-id (get-in props [:on :change])]
-      (.addListener (.textProperty tf) (proxy [ChangeListener] [] (changed [_ _ _ new-val] ((:execute-command context) cmd-id new-val))))
-      (auto-change-command tf props context))
+    (when-let [path (:bind props)]
+      (common-bind-text tf path)
+      (.addListener (.textProperty tf)
+                    (proxy [ChangeListener] []
+                      (changed [_ _ new-val]
+                        (swap! proj/project assoc-in path new-val)))))
     tf))
 
-(defmethod create-element :text-area [_ props _]
+(defmethod create-element :text-area [_ props]
   (let [ta (TextArea. (or (:content props) ""))]
     (when-let [path (:bind props)] (common-bind-text ta path))
     ta))
 
-(defmethod create-element :check-box [_ props context]
+(defmethod create-element :check-box [_ props]
   (let [cb (CheckBox. (or (:content props) ""))]
     (when-let [selected? (:checked? props)] (.setSelected cb (boolean selected?)))
-    (when-let [path (:bind props)] (bind/register! cb path (fn [^CheckBox c v] (.setSelected c (boolean v)))))
-    (if-let [cmd-id (get-in props [:on :click])]
-      (.setOnAction cb (reify EventHandler (handle [_ _] ((:execute-command context) cmd-id))))
-      (auto-change-command cb props context))
+    (when-let [path (:bind props)]
+      (bind-checkbox cb path)
+      (handle-action cb (fn [node]
+                          (swap! proj/project assoc-in path (.isSelected ^CheckBox node)))))
     cb))
 
-(defmethod create-element :combo-box [_ props context]
+(defmethod create-element :combo-box [_ props]
   (let [cb (ComboBox.)]
     (when-let [items (:items props)] (.addAll (.getItems cb) items))
     (when-let [val (:value props)] (.setValue cb val))
-    (when-let [path (:bind props)] (bind/register! cb path (fn [^ComboBox c v] (.setValue c v))))
-    (if-let [cmd-id (get-in props [:on :click])]
-      (.setOnAction cb (reify EventHandler (handle [_ _] ((:execute-command context) cmd-id))))
-      (auto-change-command cb props context))
+    (when-let [path (:bind props)]
+      (bind-combobox cb path)
+      (handle-action cb (fn [node]
+                          (swap! proj/project assoc-in path (.getValue ^ComboBox node)))))
     cb))
 
-(defmethod create-element :slider [_ props context]
+(defmethod create-element :slider [_ props]
   (let [sl (Slider. (double (or (:min props) 0)) (double (or (:max props) 100)) (double (or (:value props) 50)))]
-    (when-let [path (:bind props)] (bind/register! sl path (fn [^Slider s v] (.setValue s (double v)))))
-    (if-let [cmd-id (get-in props [:on :change])]
-      (.addListener (.valueProperty sl) (proxy [ChangeListener] [] (changed [_ _ _ new-val] ((:execute-command context) cmd-id new-val))))
-      (auto-change-command sl props context))
+    (when-let [path (:bind props)]
+      (bind-slider sl path)
+      (.addListener (.valueProperty sl)
+                    (proxy [ChangeListener] []
+                      (changed [_ _ new-val]
+                        (swap! proj/project assoc-in path new-val)))))
     sl))
 
-(defmethod create-element :progress [_ props _] (ProgressBar. (double (or (:value props) 0))))
-(defmethod create-element :separator [_ _ _] (Separator.))
-(defmethod create-element :image [_ props _] (javafx.scene.image.ImageView. (or (:src props) "")))
+(defmethod create-element :progress [_ props] (ProgressBar. (double (or (:value props) 0))))
+(defmethod create-element :separator [_ _] (Separator.))
+(defmethod create-element :image [_ props] (javafx.scene.image.ImageView. (or (:src props) "")))
 
-(defmethod create-element :list-view [_ props {:keys [execute-command]}]
+(defmethod create-element :list-view [_ props]
   (let [lv (ListView.)]
     (when-let [items (:items props)] (.addAll (.getItems lv) items))
-    (when-let [path (:bind props)] (bind/register! lv path (fn [^ListView l v] (when-let [items (:items v)] (.clear (.getItems l)) (.addAll (.getItems l) items)))))
-    (when-let [cmd-id (get-in props [:on :click])]
-      (.setOnAction lv (reify EventHandler (handle [_ _] (execute-command cmd-id)))))
+    (when-let [path (:bind props)]
+      (bind-listview lv path)
+      (handle-action lv (fn [node]
+                          (when-let [selected (.. ^ListView node getSelectionModel getSelectedItem)]
+                            (swap! proj/project assoc-in path selected)))))
     lv))
 
-(defmethod create-element :tree-view [_ _ _] (TreeView.))
+(defmethod create-element :tree-view [_ _] (TreeView.))
 
-(defmethod create-element :radio-button [_ props {:keys [execute-command]}]
+(defmethod create-element :radio-button [_ props]
   (let [rb (RadioButton. (or (:content props) ""))]
     (when-let [selected? (:checked? props)] (.setSelected rb (boolean selected?)))
-    (when-let [path (:bind props)] (bind/register! rb path (fn [^RadioButton r v] (.setSelected r (boolean v)))))
-    (when-let [cmd-id (get-in props [:on :click])]
-      (.setOnAction rb (reify EventHandler (handle [_ _] (execute-command cmd-id)))))
+    (when-let [path (:bind props)]
+      (bind/register! rb path (fn [r v] (.setSelected r (boolean v))))
+      (handle-action rb (fn [node]
+                          (swap! proj/project assoc-in path (.isSelected ^RadioButton node)))))
     rb))
 
-(defmethod create-element :hyperlink [_ props {:keys [execute-command]}]
+(defmethod create-element :hyperlink [_ props]
   (let [hl (Hyperlink. (or (:content props) ""))]
-    (when-let [cmd-id (get-in props [:on :click])]
-      (.setOnAction hl (reify EventHandler (handle [_ _] (execute-command cmd-id)))))
+    (handle-action hl (get-in props [:on :click]))
     hl))
 
-(defmethod create-element :color-picker [_ _ _] (ColorPicker.))
+(defmethod create-element :color-picker [_ _] (ColorPicker.))
 
-(defmethod create-element :default [tag _ _]
+(defmethod create-element :default [tag _]
   (Label. (str "(unknown: " tag ")")))
