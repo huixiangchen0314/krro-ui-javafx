@@ -39,10 +39,10 @@
 ;; ── 元素工厂 ────────────────────────────────────────
 (defrecord JavaFxElementFactory []
   proto/IElementFactory
-  (create-element [_ vnode]
+  (create-element [_ vnode f]
     (let [tag   (proto/node-type vnode)
           props (proto/node-props vnode)
-          result (tags/create-element tag props)]
+          result (tags/create-element tag props f)]
       (if (map? result)                        ;; 方案2：返回 map
         (let [^Node node (:node result)
               hooks (:hooks result)]

@@ -12,7 +12,7 @@
                                  SplitPane Tab TabPane TextArea TextField ToolBar TreeView]
            [javafx.scene.layout GridPane HBox VBox]))
 
-(defmulti create-element (fn [tag _props] tag))
+(defmulti create-element (fn [tag _props _frame] tag))
 
 (defn- common-bind-text [node path]
   (bind/register! node path (fn [n v]
@@ -47,34 +47,34 @@
                         (cmd/execute-command! on-spec)))))))
 
 ;; ── 布局容器 ──────────────────────────────────────────
-(defmethod create-element :block [_ props]
+(defmethod create-element :block [_ props _]
   (if (= (:direction props :vertical) :vertical) (VBox.) (HBox.)))
 
-(defmethod create-element :split-pane [_ _] (SplitPane.))
-(defmethod create-element :scroll [_ _] (ScrollPane.))
-(defmethod create-element :tab-panel [_ _] (TabPane.))
-(defmethod create-element :tab [_ props] (Tab. (or (:title props) "")))
-(defmethod create-element :tool-bar [_ _] (ToolBar.))
-(defmethod create-element :menu-bar [_ _] (MenuBar.))
-(defmethod create-element :menu [_ props] (Menu. (or (:content props) "")))
+(defmethod create-element :split-pane [_ _ _] (SplitPane.))
+(defmethod create-element :scroll [_ _ _] (ScrollPane.))
+(defmethod create-element :tab-panel [_ _ _] (TabPane.))
+(defmethod create-element :tab [_ props _] (Tab. (or (:title props) "")))
+(defmethod create-element :tool-bar [_ _ _] (ToolBar.))
+(defmethod create-element :menu-bar [_ _ _] (MenuBar.))
+(defmethod create-element :menu [_ props _] (Menu. (or (:content props) "")))
 
-(defmethod create-element :menu-item [_ props]
+(defmethod create-element :menu-item [_ props _]
   (let [item (MenuItem. (or (:content props) ""))]
     (handle-action item (get-in props [:on :click]))
     item))
 
 ;; ── 基础控件 ──────────────────────────────────────────
-(defmethod create-element :text [_ props]
+(defmethod create-element :text [_ props _]
   (let [lbl (Label. (or (:content props) ""))]
     (when-let [path (:bind props)] (common-bind-text lbl path))
     lbl))
 
-(defmethod create-element :button [_ props]
+(defmethod create-element :button [_ props _]
   (let [btn (Button. (or (:content props) ""))]
     (handle-action btn (get-in props [:on :click]))
     btn))
 
-(defmethod create-element :input [_ props]
+(defmethod create-element :input [_ props _]
   (let [tf (TextField. (or (:content props) ""))]
     (when-let [path (:bind props)]
       (common-bind-text tf path)
@@ -84,12 +84,12 @@
                         (swap! proj/project assoc-in path new-val)))))
     tf))
 
-(defmethod create-element :text-area [_ props]
+(defmethod create-element :text-area [_ props _]
   (let [ta (TextArea. (or (:content props) ""))]
     (when-let [path (:bind props)] (common-bind-text ta path))
     ta))
 
-(defmethod create-element :check-box [_ props]
+(defmethod create-element :check-box [_ props _]
   (let [cb (CheckBox. (or (:content props) ""))]
     (when-let [selected? (:checked? props)] (.setSelected cb (boolean selected?)))
     (when-let [path (:bind props)]
@@ -98,7 +98,7 @@
                           (swap! proj/project assoc-in path (.isSelected ^CheckBox node)))))
     cb))
 
-(defmethod create-element :combo-box [_ props]
+(defmethod create-element :combo-box [_ props _]
   (let [cb (ComboBox.)]
     (when-let [items (:items props)] (.addAll (.getItems cb) items))
     (when-let [val (:value props)] (.setValue cb val))
@@ -108,7 +108,7 @@
                           (swap! proj/project assoc-in path (.getValue ^ComboBox node)))))
     cb))
 
-(defmethod create-element :slider [_ props]
+(defmethod create-element :slider [_ props _]
   (let [sl (Slider. (double (or (:min props) 0)) (double (or (:max props) 100)) (double (or (:value props) 50)))]
     (when-let [path (:bind props)]
       (bind-slider sl path)
@@ -118,11 +118,11 @@
                         (swap! proj/project assoc-in path new-val)))))
     sl))
 
-(defmethod create-element :progress [_ props] (ProgressBar. (double (or (:value props) 0))))
-(defmethod create-element :separator [_ _] (Separator.))
-(defmethod create-element :image [_ props] (javafx.scene.image.ImageView. (or (:src props) "")))
+(defmethod create-element :progress [_ props _] (ProgressBar. (double (or (:value props) 0))))
+(defmethod create-element :separator [_ _ _] (Separator.))
+(defmethod create-element :image [_ props _] (javafx.scene.image.ImageView. (or (:src props) "")))
 
-(defmethod create-element :list-view [_ props]
+(defmethod create-element :list-view [_ props _]
   (let [lv (ListView.)]
     (when-let [items (:items props)] (.addAll (.getItems lv) items))
     (when-let [path (:bind props)]
@@ -132,9 +132,9 @@
                             (swap! proj/project assoc-in path selected)))))
     lv))
 
-(defmethod create-element :tree-view [_ _] (TreeView.))
+(defmethod create-element :tree-view [_ _ _] (TreeView.))
 
-(defmethod create-element :radio-button [_ props]
+(defmethod create-element :radio-button [_ props _]
   (let [rb (RadioButton. (or (:content props) ""))]
     (when-let [selected? (:checked? props)] (.setSelected rb (boolean selected?)))
     (when-let [path (:bind props)]
@@ -143,12 +143,12 @@
                           (swap! proj/project assoc-in path (.isSelected ^RadioButton node)))))
     rb))
 
-(defmethod create-element :hyperlink [_ props]
+(defmethod create-element :hyperlink [_ props _]
   (let [hl (Hyperlink. (or (:content props) ""))]
     (handle-action hl (get-in props [:on :click]))
     hl))
 
-(defmethod create-element :color-picker [_ _] (ColorPicker.))
+(defmethod create-element :color-picker [_ _ _] (ColorPicker.))
 
-(defmethod create-element :default [tag _]
+(defmethod create-element :default [tag _ _]
   (Label. (str "(unknown: " tag ")")))

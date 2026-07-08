@@ -77,6 +77,6 @@
         ;; 设置全局当前 Frame
         (alter-var-root #'frame/*current-frame* (constantly f))
         ;; 创建渲染器（初始无旧 VNode）
-        (let [krro-renderer (renderer/->JavaFxRenderer root-pane factory node-renderer (atom nil))]
+        (let [krro-renderer (renderer/->JavaFxRenderer root-pane factory node-renderer)]
           (ui/set-renderer! krro-renderer)
           (init-fn factory krro-renderer root-pane f))))))

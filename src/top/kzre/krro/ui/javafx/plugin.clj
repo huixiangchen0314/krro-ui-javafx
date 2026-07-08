@@ -12,5 +12,5 @@
                           :type :krro.plugin/javafx-tag
                           :tag :my-widget
                           :handler (fn [props ] ...)})"
-                      (defmethod tags/create-element tag [_ props]
-                        (handler props)))
+                      (defmethod tags/create-element tag [_ props frame]
+                        (handler props frame)))
