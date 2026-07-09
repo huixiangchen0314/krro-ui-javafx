@@ -8,6 +8,7 @@
   (:import [javafx.application Platform]))
 
 
+
 (defrecord JavaFxRenderer [root-pane factory node-renderer]
   ui/IRenderer
   (render-layout [_this el-spec f]

@@ -1,10 +1,11 @@
 (ns top.kzre.krro.ui.javafx.tags
   "JavaFX 标签多方法。每个标签只创建对应的平台节点，绑定数据与事件。
-   输入控件自动实现双向绑定（直接 swap!），按钮等支持 :on :click 命令或函数。
-   签名：[tag props]，不再传递 context。"
+   输入控件自动实现双向绑定（直接 swap!），按钮等支持统一的 :on :click 格式或 :on-click 简写。
+   签名：[tag props frame]。"
   (:require [top.kzre.krro.ui.core.bind :as bind]
             [top.kzre.krro.core.project :as proj]
-            [top.kzre.krro.core.command :as cmd])
+            [top.kzre.krro.core.command :as cmd]
+            [top.kzre.krro.ui.core.vnode :as vnode])
   (:import [javafx.beans.value ChangeListener]
            [javafx.event EventHandler]
            [javafx.scene.control Button CheckBox ComboBox ColorPicker Hyperlink Label ListView
@@ -34,11 +35,13 @@
                                       (.clear (.getItems l))
                                       (.addAll (.getItems l) items)))))
 
-;; ── 动作处理 ──────────────────────────────────────────
+;; ── 统一事件处理 ──────────────────────────────────────
 (defn- handle-action
-  "如果 on-spec 是函数则直接调用，如果是关键字则作为命令执行。"
-  [node on-spec]
-  (when on-spec
+  "为节点注册指定事件的回调。事件回调从 props 中通过 vnode/event 统一获取。
+   event-key 为事件关键字（如 :click），props 为属性 map。
+   回调可以是函数（直接调用）或命令关键字（通过 execute-command! 执行）。"
+  [node props event-key]
+  (when-let [on-spec (vnode/event props event-key)]
     (.setOnAction node
                   (reify EventHandler
                     (handle [_ _]
@@ -60,7 +63,7 @@
 
 (defmethod create-element :menu-item [_ props _]
   (let [item (MenuItem. (or (:content props) ""))]
-    (handle-action item (get-in props [:on :click]))
+    (handle-action item props :click)
     item))
 
 ;; ── 基础控件 ──────────────────────────────────────────
@@ -71,7 +74,7 @@
 
 (defmethod create-element :button [_ props _]
   (let [btn (Button. (or (:content props) ""))]
-    (handle-action btn (get-in props [:on :click]))
+    (handle-action btn props :click)
     btn))
 
 (defmethod create-element :input [_ props _]
@@ -94,8 +97,11 @@
     (when-let [selected? (:checked? props)] (.setSelected cb (boolean selected?)))
     (when-let [path (:bind props)]
       (bind-checkbox cb path)
-      (handle-action cb (fn [node]
-                          (swap! proj/project assoc-in path (.isSelected ^CheckBox node)))))
+      ;; 选中状态变化时更新项目数据
+      (.setOnAction cb
+                    (reify EventHandler
+                      (handle [_ _]
+                        (swap! proj/project assoc-in path (.isSelected ^CheckBox cb))))))
     cb))
 
 (defmethod create-element :combo-box [_ props _]
@@ -104,8 +110,10 @@
     (when-let [val (:value props)] (.setValue cb val))
     (when-let [path (:bind props)]
       (bind-combobox cb path)
-      (handle-action cb (fn [node]
-                          (swap! proj/project assoc-in path (.getValue ^ComboBox node)))))
+      (.setOnAction cb
+                    (reify EventHandler
+                      (handle [_ _]
+                        (swap! proj/project assoc-in path (.getValue ^ComboBox cb))))))
     cb))
 
 (defmethod create-element :slider [_ props _]
@@ -127,9 +135,11 @@
     (when-let [items (:items props)] (.addAll (.getItems lv) items))
     (when-let [path (:bind props)]
       (bind-listview lv path)
-      (handle-action lv (fn [node]
-                          (when-let [selected (.. ^ListView node getSelectionModel getSelectedItem)]
-                            (swap! proj/project assoc-in path selected)))))
+      (.setOnMouseClicked lv
+                          (reify EventHandler
+                            (handle [_ _]
+                              (when-let [selected (.. ^ListView lv getSelectionModel getSelectedItem)]
+                                (swap! proj/project assoc-in path selected))))))
     lv))
 
 (defmethod create-element :tree-view [_ _ _] (TreeView.))
@@ -139,13 +149,15 @@
     (when-let [selected? (:checked? props)] (.setSelected rb (boolean selected?)))
     (when-let [path (:bind props)]
       (bind/register! rb path (fn [r v] (.setSelected r (boolean v))))
-      (handle-action rb (fn [node]
-                          (swap! proj/project assoc-in path (.isSelected ^RadioButton node)))))
+      (.setOnAction rb
+                    (reify EventHandler
+                      (handle [_ _]
+                        (swap! proj/project assoc-in path (.isSelected ^RadioButton rb))))))
     rb))
 
 (defmethod create-element :hyperlink [_ props _]
   (let [hl (Hyperlink. (or (:content props) ""))]
-    (handle-action hl (get-in props [:on :click]))
+    (handle-action hl props :click)
     hl))
 
 (defmethod create-element :color-picker [_ _ _] (ColorPicker.))
