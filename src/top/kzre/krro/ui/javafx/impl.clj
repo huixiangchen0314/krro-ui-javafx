@@ -3,6 +3,7 @@
    多方法根据容器类型的全限定名字符串进行分派，避免编译期加载 JavaFX 类。"
   (:require
     [clojure.string :as str]
+    [top.kzre.krro.core.frame :as frame]
     [top.kzre.krro.ui.core.bind :as bind]
     [top.kzre.krro.ui.core.protocol :as proto]
     [top.kzre.krro.ui.javafx.renderer :as renderer]
@@ -77,7 +78,12 @@
       (let [old-props (proto/node-props old-vnode)
             new-props (proto/node-props new-vnode)]
         (update-attrs element old-props new-props)
-        (bind/refresh! element)))))
+        (bind/refresh! element))))
+  (destroy-element [_ vnode f]
+    (when-let [element (proto/node-element vnode)]
+      (bind/unregister! element)   ;; 清除项目原子绑定
+      (when-let [fm (frame/param f renderer/frame-bind-manager-key)]
+        (bind/unregister! fm element)))))
 
 
 ;; ── 多方法：根据容器类型的全限定字符串分派 ─────────

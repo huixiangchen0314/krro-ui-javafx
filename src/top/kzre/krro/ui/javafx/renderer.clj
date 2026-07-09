@@ -8,7 +8,7 @@
             [top.kzre.krro.ui.core.bind :as bind])
   (:import [javafx.application Platform]))
 
-(def ^:private frame-bind-manager-key ::frame-bind-manager)
+(defonce frame-bind-manager-key ::frame-bind-manager)
 (def ^:private frame-vnode-key ::vnode)
 (defn ensure-frame-bind-manager [f]
   (or (frame/param f frame-bind-manager-key)
