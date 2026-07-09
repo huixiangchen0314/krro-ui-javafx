@@ -60,12 +60,12 @@
           ;; 注册项目原子绑定
           (when bindings
             (let [manager (or (:bind-manager bindings) bind/*default-bind-manager*)]
-              (doseq [b (:items bindings)]
+              (doseq [b bindings]
                 (bind/register! manager node (:path b) (:apply-fn b) (dissoc b :path :apply-fn)))))
           ;; 注册 Frame 参数绑定
           (when frame-bindings
             (let [manager (renderer/ensure-frame-bind-manager f)]
-              (doseq [b (:items frame-bindings)]
+              (doseq [b frame-bindings]
                 (bind/register! manager node (:path b) (:apply-fn b) (dissoc b :path :apply-fn)))))
           node)
         ;; 传统方式
