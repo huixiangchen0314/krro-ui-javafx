@@ -39,7 +39,7 @@
                    (reset! cleanup-atom cleanup)))]
       (init props frame)                         ;; 首次初始化
       {:node node
-       :on-update (fn [old-vnode new-vnode]
+       :on-update (fn [_element old-vnode new-vnode]
                     (let [old-props (proto/node-props old-vnode)
                           new-props (proto/node-props new-vnode)]
                       (when (not= (select-keys old-props watched-props)

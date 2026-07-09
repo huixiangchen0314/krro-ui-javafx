@@ -1,11 +1,15 @@
 (ns top.kzre.krro.ui.javafx.impl
   "JavaFX 平台实现：元素工厂与节点渲染器。适配层，调用 tags 创建节点，处理通用属性。
    多方法根据容器类型的全限定名字符串进行分派，避免编译期加载 JavaFX 类。"
-  (:require [clojure.string :as str]
-            [top.kzre.krro.ui.core.protocol :as proto]
-            [top.kzre.krro.ui.javafx.tags :as tags])
-  (:import [javafx.scene Node Parent]
-           [javafx.scene.control Label TextField]))
+  (:require
+    [clojure.string :as str]
+    [top.kzre.krro.ui.core.bind :as bind]
+    [top.kzre.krro.ui.core.protocol :as proto]
+    [top.kzre.krro.ui.javafx.renderer :as renderer]
+    [top.kzre.krro.ui.javafx.tags :as tags])
+  (:import
+   [javafx.scene Node]
+   [javafx.scene.control Label TextField]))
 
 ;; ── 通用属性处理 ──────────────────────────────────────
 (defn- apply-style [^Node node style-map]
@@ -43,20 +47,38 @@
     (let [tag   (proto/node-type vnode)
           props (proto/node-props vnode)
           result (tags/create-element tag props f)]
-      (if (map? result)                        ;; 方案2：返回 map
+      (if (map? result)
         (let [^Node node (:node result)
-              hooks (:hooks result)]
+              hooks (:hooks result)
+              bindings (:bindings result)
+              frame-bindings (:frame-bindings result)]
           (apply-common-attrs node props)
-          (when hooks                           ;; 注册所有钩子
+          (when hooks
             (doseq [[k f] hooks]
               (proto/add-hook! vnode k f)))
+          ;; 注册项目原子绑定
+          (when bindings
+            (let [manager (or (:bind-manager bindings) bind/*default-bind-manager*)]
+              (doseq [b (:items bindings)]
+                (bind/register! manager node (:path b) (:apply-fn b) (dissoc b :path :apply-fn)))))
+          ;; 注册 Frame 参数绑定
+          (when frame-bindings
+            (let [manager (renderer/ensure-frame-bind-manager f)]
+              (doseq [b (:items frame-bindings)]
+                (bind/register! manager node (:path b) (:apply-fn b) (dissoc b :path :apply-fn)))))
           node)
-        ;; 传统方式：直接返回节点
+        ;; 传统方式
         (let [^Node node result]
           (apply-common-attrs node props)
           node))))
-  (update-properties [_ element old-props new-props]
-    (update-attrs element old-props new-props)))
+  (update-properties [_ element old-vnode new-vnode]
+    (if (-> new-vnode proto/node-hooks :on-update)
+      element   ;; 组件自有 on-update，不再做通用属性更新
+      (let [old-props (proto/node-props old-vnode)
+            new-props (proto/node-props new-vnode)]
+        (update-attrs element old-props new-props)
+        (bind/refresh! element)))))
+
 
 ;; ── 多方法：根据容器类型的全限定字符串分派 ─────────
 (defmulti append-node  (fn [parent child]          (when parent (.getName (class parent)))))
