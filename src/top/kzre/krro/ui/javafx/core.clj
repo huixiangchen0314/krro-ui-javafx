@@ -9,7 +9,8 @@
     [top.kzre.krro.core.project :as proj]
     [top.kzre.krro.core.ui.protocol :as ui]
     [top.kzre.krro.ui.core.protocol :as proto]
-    [top.kzre.krro.ui.javafx.impl :as impl]
+    [top.kzre.krro.ui.javafx.factory :as factory]
+    [top.kzre.krro.ui.javafx.patcher :as patcher]
     [top.kzre.krro.ui.javafx.plugin]
     [top.kzre.krro.core.keymap :as km]
     [top.kzre.krro.ui.javafx.renderer :as renderer])
@@ -34,10 +35,11 @@
   (fn [props frame]
     (let [node (create-fn)                       ;; 创建根节点（仅一次）
           cleanup-atom (atom (fn []))
-          init (fn [p f]
-                 (let [cleanup (init-fn node p f)]
-                   (reset! cleanup-atom cleanup)))]
-      (init props frame)                         ;; 首次初始化
+          init (fn [old-p p f]
+                 (let [cleanup (init-fn node old-p p f)]
+                   (reset! cleanup-atom cleanup)))
+          update (fn [old-p p f] (init-fn node old-p p f))]
+      (init nil props frame)                         ;; 首次初始化
       {:node node
        :on-update (fn [_element old-vnode new-vnode]
                     (let [old-props (proto/node-props old-vnode)
@@ -45,7 +47,7 @@
                       (when (not= (select-keys old-props watched-props)
                                   (select-keys new-props watched-props))
                         (@cleanup-atom)           ;; 清理旧运行时
-                        (init new-props frame)))) ;; 重新初始化
+                        (update old-props new-props frame)))) ;; 重新初始化
        :on-unmount (fn [_ _] (@cleanup-atom))})))
 
 (defn- key-event->key-desc
@@ -130,6 +132,7 @@
         center-pane (VBox.)
         scene (Scene. root (double width) (double height))
         stage (Stage.)]
+    (.add (.getStylesheets scene) "stylesheets/main.css")         ;; 应用全局样式表.
     (.setOnKeyPressed scene
                       (reify EventHandler
                         (handle [_ e]
@@ -159,9 +162,9 @@
       (proj/init-project!)
       (i/set-interactor! (->JavaFxInteractor))
       (let [{:keys [root-pane]} (create-stage)
-            factory (impl/->JavaFxElementFactory)
-            node-renderer (impl/->JavaFxNodeRenderer)
-            f (frame/create-frame :id :main)]
+            factory (factory/->JavaFxElementFactory)
+            node-renderer (patcher/->JavaFxNodePatcher)
+            f (frame/create-frame! :id :main)]
         ;; 设置全局当前 Frame
         (alter-var-root #'frame/*current-frame* (constantly f))
         ;; 创建渲染器（初始无旧 VNode）
