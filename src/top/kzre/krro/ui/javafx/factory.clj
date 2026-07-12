@@ -10,8 +10,8 @@
    [top.kzre.krro.ui.javafx.renderer :as renderer]
    [top.kzre.krro.ui.javafx.tags :as tags])
   (:import
-   [javafx.scene Node]
-   [javafx.scene.control Label TextField]))
+    [javafx.scene Node]
+    [javafx.scene.control CheckBox Label TextField]))
 
 ;; ── 通用属性处理 ──────────────────────────────────────
 (defn- apply-style [^Node node style-map]
@@ -52,6 +52,8 @@
     (.setDisable node (boolean (:disabled? new-props))))
   (when (and (instance? Label node) (not= (:content old-props) (:content new-props)))
     (.setText ^Label node (or (:content new-props) "")))
+  (when (and (instance? CheckBox node) (not= (:checked? old-props) (:checked? new-props)))
+    (.setSelected ^CheckBox node (boolean (:checked? new-props))))
   (when (and (instance? TextField node) (not= (:content old-props) (:content new-props)))
     (.setText ^TextField node (or (:content new-props) ""))))
 
@@ -117,7 +119,7 @@
       (let [old-props (proto/node-props old-vnode)
             new-props (proto/node-props new-vnode)]
         (update-attrs element old-props new-props)
-        (bind/refresh! element))))
+       )))
   (destroy-element [_ vnode f]
     (when-let [element (proto/node-element vnode)]
       (bind/unregister! element)   ;; 清除项目原子绑定
