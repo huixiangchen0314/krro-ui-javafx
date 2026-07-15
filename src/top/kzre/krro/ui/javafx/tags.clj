@@ -6,17 +6,15 @@
    双向绑定通过 getter（单向同步）和 setter/on-change（用户操作写回）实现，
    不再使用 ObservableValue 自动监听，确保单向数据流。"
   (:require [top.kzre.krro.core.command :as cmd]
-            [top.kzre.krro.core.project :as proj]
             [top.kzre.krro.core.frame :as frame]
+            [top.kzre.krro.core.project :as proj]
             [top.kzre.krro.ui.core.vnode :as vnode]
-            [top.kzre.krro.ui.javafx.event :as event]
-            [taoensso.timbre :as log])
-  (:import [javafx.beans.value ChangeListener]
-           [javafx.event EventHandler]
-           [javafx.scene.control Button CheckBox ColorPicker ComboBox Hyperlink Label ListView
+            [top.kzre.krro.ui.javafx.event :as event])
+  (:import (javafx.event EventHandler)
+           (javafx.scene.control Button CheckBox ColorPicker ComboBox Hyperlink Label ListView
                                  Menu MenuBar MenuItem ProgressBar RadioButton ScrollPane Separator Slider
-                                 SplitPane Tab TabPane TextArea TextField ToolBar TreeView]
-           [javafx.scene.layout HBox VBox]))
+                                 SplitPane Tab TabPane TextArea TextField ToolBar TreeView)
+           (javafx.scene.layout HBox VBox)))
 
 (defmulti create-element (fn [tag _props _frame] tag))
 
