@@ -1,6 +1,7 @@
 (ns top.kzre.krro.ui.javafx.patcher
   (:require [top.kzre.krro.ui.core.protocol :as proto])
-  (:import (javafx.scene Parent)))
+  (:import (java.util List)
+           (javafx.scene Parent)))
 
 ;; ═══════════════════════════════════════════════════════
 ;; 平台多方法（根据容器类名分派）
@@ -13,7 +14,7 @@
 (defmulti move-node    (fn [parent _child _target]   (when parent (.getName (class parent)))))
 
 ;; ── 安全辅助 ─────────────────────────────────
-(defn- get-children ^java.util.List [^Parent parent]
+(defn- get-children ^List [^Parent parent]
   (.getChildren parent))
 
 ;; ── 默认实现（任何 Parent 容器，安全处理非 Parent） ─────
@@ -119,6 +120,24 @@
     (when (and (>= idx 0) (not= idx target-index))
       (.remove tabs child)
       (.add tabs (min target-index (.size tabs)) child))))
+
+;; ── SplitPane ──────────────────────────────────
+(defmethod append-node "javafx.scene.control.SplitPane" [parent child]
+  (.add (.getItems parent) child))
+(defmethod insert-node "javafx.scene.control.SplitPane" [parent child index]
+  (.add (.getItems parent) index child))
+(defmethod remove-node "javafx.scene.control.SplitPane" [parent child]
+  (.remove (.getItems parent) child))
+(defmethod replace-node "javafx.scene.control.SplitPane" [parent old new]
+  (let [items (.getItems parent)
+        idx (.indexOf items old)]
+    (when (>= idx 0) (.set items idx new))))
+(defmethod move-node "javafx.scene.control.SplitPane" [parent child target-index]
+  (let [items (.getItems parent)
+        idx (.indexOf items child)]
+    (when (and (>= idx 0) (not= idx target-index))
+      (.remove items child)
+      (.add items (min target-index (.size items)) child))))
 
 ;; ═══════════════════════════════════════════════════════
 ;; 协议实现（仅包含 INodePatcher 定义的五个方法）

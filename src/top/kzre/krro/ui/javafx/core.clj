@@ -24,6 +24,12 @@
     [javafx.stage Stage]))
 
 
+(defonce stage-atom (atom nil))
+
+(defn get-stage [] @stage-atom)
+
+(defn set-stage! [stage] (reset! stage-atom stage))
+
 (defn make-component
   "创建一个组件工厂函数。
    watched-props - 需要监听的 props 关键字向量，变化时触发 update
@@ -161,10 +167,11 @@
     (fn []
       (proj/init-project!)
       (i/set-interactor! (->JavaFxInteractor))
-      (let [{:keys [root-pane]} (create-stage)
+      (let [{:keys [stage root-pane]} (create-stage)
             factory (factory/->JavaFxElementFactory)
             node-renderer (patcher/->JavaFxNodePatcher)
             f (frame/create-frame! :id :main)]
+        (set-stage! stage)
         ;; 设置全局当前 Frame
         (alter-var-root #'frame/*current-frame* (constantly f))
         ;; 创建渲染器（初始无旧 VNode）

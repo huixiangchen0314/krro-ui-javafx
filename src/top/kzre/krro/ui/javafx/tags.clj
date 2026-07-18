@@ -11,9 +11,11 @@
             [top.kzre.krro.ui.core.vnode :as vnode]
             [top.kzre.krro.ui.javafx.event :as event])
   (:import (javafx.event EventHandler)
+           (javafx.geometry Orientation)
            (javafx.scene.control Button CheckBox ColorPicker ComboBox Hyperlink Label ListView
                                  Menu MenuBar MenuItem ProgressBar RadioButton ScrollPane Separator Slider
                                  SplitPane Tab TabPane TextArea TextField ToolBar TreeView)
+           (javafx.scene.image ImageView)
            (javafx.scene.layout HBox VBox)))
 
 (defmulti create-element (fn [tag _props _frame] tag))
@@ -50,7 +52,17 @@
 ;; ── 布局容器 ──────────────────────────────────────────
 (defmethod create-element :block [_ props _]
   {:node (if (= (:direction props :vertical) :vertical) (VBox.) (HBox.))})
-(defmethod create-element :split-pane [_ _ _] {:node (SplitPane.)})
+
+(defmethod create-element :split [_ props _]
+  (let [direction (:direction props :horizontal)  ;; 默认水平
+        sp (SplitPane.)]
+    (.setOrientation sp
+                     (if (= direction :vertical)
+                       Orientation/VERTICAL
+                       Orientation/HORIZONTAL))
+    {:node sp}))
+
+
 (defmethod create-element :scroll [_ _ _] {:node (ScrollPane.)})
 (defmethod create-element :tab-panel [_ _ _] {:node (TabPane.)})
 (defmethod create-element :tab [_ props _] {:node (Tab. (or (:title props) ""))})
@@ -142,7 +154,7 @@
   {:node (ProgressBar. (double (or (:value props) 0)))})
 
 (defmethod create-element :separator [_ _ _] {:node (Separator.)})
-(defmethod create-element :image [_ props _] {:node (javafx.scene.image.ImageView. (or (:src props) ""))})
+(defmethod create-element :image [_ props _] {:node (ImageView. ^String (or (:src props) ""))})
 
 (defmethod create-element :list-view [_ props f]
   (let [lv (ListView.)
@@ -178,7 +190,7 @@
     {:node rb
      :bindings (mk-binding props' (fn [r v] (.setSelected ^RadioButton r (boolean v))))}))
 
-(defmethod create-element :hyperlink [_ props _]
+(defmethod create-element :link [_ props _]
   (let [hl (Hyperlink. (or (:content props) ""))
         tk (target-key props)]
     (event/bind-click! hl (update props :on-click resolve-action) tk)
@@ -186,6 +198,8 @@
     {:node hl}))
 
 (defmethod create-element :color-picker [_ _ _] {:node (ColorPicker.)})
+
+;; TODO shadow dom
 
 (defmethod create-element :default [tag _ _]
   {:node (Label. (str "(unknown: " tag ")"))})
