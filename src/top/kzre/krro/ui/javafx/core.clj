@@ -4,32 +4,28 @@
     [clojure.string :as str]
     [top.kzre.krro.core.frame :as frame]
     [top.kzre.krro.core.interactive :as i]
+    [top.kzre.krro.core.keymap :as km]
     [top.kzre.krro.core.message :as msg]
     [top.kzre.krro.core.mode :as mode]
     [top.kzre.krro.core.project :as proj]
     [top.kzre.krro.core.ui.protocol :as ui]
+    [top.kzre.krro.core.window :as win]
     [top.kzre.krro.ui.core.protocol :as proto]
     [top.kzre.krro.ui.javafx.factory :as factory]
     [top.kzre.krro.ui.javafx.patcher :as patcher]
     [top.kzre.krro.ui.javafx.plugin]
-    [top.kzre.krro.core.keymap :as km]
-    [top.kzre.krro.ui.javafx.renderer :as renderer])
+    [top.kzre.krro.ui.javafx.renderer :as renderer]
+    [top.kzre.krro.ui.javafx.window])
   (:import
-    (java.util Collection)
-    [javafx.application Platform]
-    (javafx.event EventHandler)
-    [javafx.scene Scene]
-    [javafx.scene.control ChoiceDialog Label TextInputDialog]
-    (javafx.scene.input KeyCode KeyEvent)
-    [javafx.scene.layout BorderPane VBox]
-    [javafx.stage Stage]))
+   (java.util Collection)
+   [javafx.application Platform]
+   (javafx.event EventHandler)
+   [javafx.scene Scene]
+   [javafx.scene.control ChoiceDialog Label TextInputDialog]
+   (javafx.scene.input KeyEvent)
+   [javafx.scene.layout BorderPane VBox]
+   [javafx.stage Stage]))
 
-
-(defonce stage-atom (atom nil))
-
-(defn get-stage [] @stage-atom)
-
-(defn set-stage! [stage] (reset! stage-atom stage))
 
 (defn make-component
   "创建一个组件工厂函数。
@@ -177,18 +173,19 @@
 
 ;; ── 主舞台创建 ──────────────────────────────────────────
 (defn create-stage
-  "创建并显示 Krrō 主舞台。返回 {:keys [stage root-pane]}。"
+  "创建并显示 Krrō 主舞台。返回 {:keys [stage]}。
+   Scene 的根节点是一个空的 BorderPane，其底部固定为状态栏，
+   中心区域由渲染器在同步布局描述时动态填充。"
   [& {:keys [width height title]
       :or {width 1024 height 768 title "Krrō"}}]
   (let [root (BorderPane.)
-        center-pane (VBox.)
         scene (Scene. root (double width) (double height))
         stage (Stage.)]
-    (.add (.getStylesheets scene) "stylesheets/main.css")         ;; 应用全局样式表.
+    (.add (.getStylesheets scene) "stylesheets/main.css")
     (.setOnKeyPressed scene
                       (reify EventHandler
                         (handle [_ e]
-                          (let [^KeyEvent ke e] ;; 类型提示，避免反射
+                          (let [^KeyEvent ke e]
                             (when-not (.isConsumed ke)
                               (let [key-desc (key-event->key-desc ke)
                                     keymaps (mode/keymaps frame/*current-frame*)]
@@ -196,31 +193,32 @@
                                   (km/handle-key! key-desc keymaps)
                                   (catch Exception ex
                                     (.printStackTrace ex)))))))))
-    (.setCenter root center-pane)
+    ;; 将状态栏固定在底部
     (.setBottom root (build-status-bar))
+    ;; 中心区域不预先创建，由渲染器接管
     (.setScene stage scene)
     (.setTitle stage title)
-
     (.show stage)
-    {:stage stage :root-pane center-pane}))
+    {:stage stage}))
 
 ;; ── 启动辅助 ────────────────────────────────────────────
 (defn launch-app
   "启动 JavaFX 并执行初始化回调。
-   回调接收 factory, renderer, root-pane 以及当前 Frame。"
+   回调签名为 (fn [window])，window 是 IWindow 实例。
+   内部已创建渲染器、设置交互器、初始化项目。"
   [init-fn]
   (Platform/startup
     (fn []
       (proj/init-project!)
       (i/set-interactor! (->JavaFxInteractor))
-      (let [{:keys [stage root-pane]} (create-stage)
-            factory (factory/->JavaFxElementFactory)
-            node-renderer (patcher/->JavaFxNodePatcher)
-            f (frame/create-frame! :id :main)]
-        (set-stage! stage)
-        ;; 设置全局当前 Frame
-        (alter-var-root #'frame/*current-frame* (constantly f))
-        ;; 创建渲染器（初始无旧 VNode）
-        (let [krro-renderer (renderer/->JavaFxRenderer root-pane factory node-renderer)]
-          (ui/set-renderer! krro-renderer)
-          (init-fn factory krro-renderer root-pane f))))))
+      (let [{:keys [stage]} (create-stage)
+            krro-renderer (renderer/make-renderer (factory/->JavaFxElementFactory)
+                                                  (patcher/->JavaFxNodePatcher))]
+        ;; 先设置渲染器，再创建窗口（窗口创建时会自动激活 fundamental 模式，此时渲染器已就绪）
+        (ui/set-renderer! krro-renderer)
+        (let [window (win/create-window! stage)
+              initial-frame (win/current-frame window)]
+          ;; 保留兼容 TODO 移除
+          (alter-var-root #'frame/*current-frame* (constantly initial-frame))
+          ;; 调用外部回调，只传递 window
+          (init-fn window))))))
