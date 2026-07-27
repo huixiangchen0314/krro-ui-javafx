@@ -24,11 +24,21 @@
   (or (:key props) (:id props) "unknown"))
 
 (defn- resolve-action
-  "将事件属性值转换为函数。若已是函数则直接返回；若为关键字则视为命令 ID 并返回执行该命令的函数；否则返回 nil。"
+  "将事件属性值转换为函数。若已是函数则直接返回；若为关键字则视为命令 ID 并返回执行该命令的函数；
+   若为 [command-id & args] 向量，则返回带参数执行该命令的函数；否则返回 nil。"
   [on-spec]
   (cond
-    (fn? on-spec) on-spec
-    (keyword? on-spec) (fn [_] (cmd/execute-command! on-spec))
+    (fn? on-spec)
+    on-spec
+
+    (keyword? on-spec)
+    (fn [_] (cmd/execute-command! on-spec))
+
+    (and (vector? on-spec) (keyword? (first on-spec)))
+    (let [cmd-id (first on-spec)
+          args   (rest on-spec)]
+      (fn [_] (apply cmd/execute-command! cmd-id args)))
+
     :else nil))
 
 (defn- mk-binding

@@ -4,15 +4,16 @@
    注意：不再使用 ObservableValue 监听器来触发变更事件，
    而是依赖 ActionEvent（用户交互触发）来保持单向数据流。"
   (:import
-   [java.awt TextArea TextField]
-   [javafx.beans.value ChangeListener]
-   [javafx.event Event EventHandler]
-   [javafx.scene.control
-    CheckBox
-    ComboBox
-    RadioButton
-    Slider]
-   [javafx.scene.input KeyEvent MouseEvent]))
+    [java.awt TextArea TextField]
+    [javafx.beans.value ChangeListener]
+    [javafx.event Event EventHandler]
+    (javafx.scene Node)
+    [javafx.scene.control
+     CheckBox
+     ComboBox
+     RadioButton
+     Slider]
+    [javafx.scene.input KeyEvent MouseButton MouseEvent]))
 
 (defn ->event-map
   "将 JavaFX 事件转换为符合 spec.event 的标准化 map。"
@@ -29,29 +30,29 @@
          :screen-x (.getScreenX me)
          :screen-y (.getScreenY me)
          :button   (case (.getButton me)
-                     javafx.scene.input.MouseButton/PRIMARY :left
-                     javafx.scene.input.MouseButton/SECONDARY :right
-                     javafx.scene.input.MouseButton/MIDDLE :middle
+                     MouseButton/PRIMARY :left
+                     MouseButton/SECONDARY :right
+                     MouseButton/MIDDLE :middle
                      nil)
-         :ctrl?  (.isControlDown me)
+         :ctrl? (.isControlDown me)
          :shift? (.isShiftDown me)
-         :alt?   (.isAltDown me)
-         :meta?  (.isMetaDown me)}))
+         :alt? (.isAltDown me)
+         :meta? (.isMetaDown me)}))
     ;; 键盘事件
     (when (instance? KeyEvent fx-event)
       (let [ke ^KeyEvent fx-event]
         {:key      (.getText ke)
          :key-code (.getCode ke)
          :repeat?  (.isRepeat ke)
-         :ctrl?  (.isControlDown ke)
-         :shift? (.isShiftDown ke)
+         :ctrl?    (.isControlDown ke)
+         :shift?   (.isShiftDown ke)
          :alt?   (.isAltDown ke)
          :meta?  (.isMetaDown ke)}))))
 
 ;; ── 事件绑定函数 ────────────────────────────
 
 (defn bind-click!
-  [^javafx.scene.Node node props target-key]
+  [^Node node props target-key]
   (when-let [f (:on-click props)]
     (.setOnMouseClicked node
                         (reify EventHandler
@@ -59,7 +60,7 @@
                             (f (->event-map e :click target-key)))))))
 
 (defn bind-action!
-  [^javafx.scene.Node node props target-key]
+  [^Node node props target-key]
   (when-let [f (:on-action props)]
     (.setOnAction node
                   (reify EventHandler
@@ -70,7 +71,7 @@
   "绑定 ActionEvent 作为变更事件。仅当用户交互（如点击、回车、拖动）触发。
    程序修改控件值不会触发此事件，从而保持单向数据流。
    回调会收到包含 :type :change, :target, :timestamp, :old-value, :new-value 的 map。"
-  [^javafx.scene.Node node props target-key]
+  [^Node node props target-key]
   (when-let [f (:on-change props)]
     (.setOnAction node
                   (reify EventHandler
@@ -92,7 +93,7 @@
 
 ;; 以下函数保持不变
 (defn bind-focus!
-  [^javafx.scene.Node node props target-key]
+  [^Node node props target-key]
   (when (or (:on-focus props) (:on-blur props))
     (.addListener (.focusedProperty node)
                   (proxy [ChangeListener] []
@@ -105,7 +106,7 @@
                           (f {:type :blur :target target-key :timestamp (System/currentTimeMillis)}))))))))
 
 (defn bind-key!
-  [^javafx.scene.Node node props target-key]
+  [^Node node props target-key]
   (when-let [f (:on-key-down props)]
     (.setOnKeyPressed node
                       (reify EventHandler
@@ -118,7 +119,7 @@
                            (f (->event-map e :key-up target-key)))))))
 
 (defn bind-mouse-enter-leave!
-  [^javafx.scene.Node node props target-key]
+  [^Node node props target-key]
   (when-let [f (:on-mouse-enter props)]
     (.setOnMouseEntered node
                         (reify EventHandler

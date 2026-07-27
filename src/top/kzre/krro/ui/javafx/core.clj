@@ -119,22 +119,21 @@
                       "")))
 
                 :number
-                (loop []
-                  (let [dialog (TextInputDialog. "")]
-                    (.setTitle dialog "Number Input")
-                    (.setHeaderText dialog prompt)
-                    (let [result (.showAndWait dialog)]
-                      (if (.isPresent result)
-                        (let [text (.get result)]
-                          (try
-                            (Long/parseLong text)
-                            (catch NumberFormatException _
-                              (try
-                                (Double/parseDouble text)
-                                (catch NumberFormatException _
-                                  (msg/error "Invalid number format. Please enter a number.")
-                                  (recur))))))
-                        nil))))
+                (let [dialog (TextInputDialog. "")]
+                  (.setTitle dialog "Number Input")
+                  (.setHeaderText dialog prompt)
+                  (let [result (.showAndWait dialog)]
+                    (if (.isPresent result)
+                      (let [text (.get result)]
+                        (try
+                          (Long/parseLong text)
+                          (catch NumberFormatException _
+                            (try
+                              (Double/parseDouble text)
+                              (catch NumberFormatException _
+                                (msg/warn "Invalid number format, returning nil")
+                                nil)))))
+                      nil)))
 
                 :keyword
                 (let [dialog (TextInputDialog. "")]
@@ -149,7 +148,8 @@
                 (let [options-fn (first opts)
                       options (if (fn? options-fn) (options-fn) options-fn)
                       choice-prompt (or (second opts) "Choose: ")
-                      dialog (ChoiceDialog. (first options) ^Collection options)]
+                      ^ChoiceDialog dialog
+                      (ChoiceDialog. (first options) ^Collection options)]
                   (.setTitle dialog "Choice")
                   (.setHeaderText dialog choice-prompt)
                   (let [result (.showAndWait dialog)]
@@ -157,6 +157,7 @@
                       (.get result)
                       nil)))
 
+                ;; 未知类型
                 (do
                   (msg/error (str "Unsupported interactive spec: " type))
                   nil))))
