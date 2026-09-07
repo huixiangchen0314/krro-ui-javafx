@@ -1,21 +1,22 @@
 (ns top.kzre.krro.ui.javafx.core
   "Krrō JavaFX 入口，管理窗口、交互器、状态栏、渲染器和 Frame。"
   (:require
-    [clojure.string :as str]
-    [top.kzre.krro.core.frame :as frame]
-    [top.kzre.krro.core.interactive :as i]
-    [top.kzre.krro.core.keymap :as km]
-    [top.kzre.krro.core.message :as msg]
-    [top.kzre.krro.core.mode :as mode]
-    [top.kzre.krro.core.project :as proj]
-    [top.kzre.krro.core.ui.protocol :as ui]
-    [top.kzre.krro.core.window :as win]
-    [top.kzre.krro.ui.core.protocol :as proto]
-    [top.kzre.krro.ui.javafx.factory :as factory]
-    [top.kzre.krro.ui.javafx.patcher :as patcher]
-    [top.kzre.krro.ui.javafx.plugin]
-    [top.kzre.krro.ui.javafx.renderer :as renderer]
-    [top.kzre.krro.ui.javafx.window])
+   [clojure.string :as str]
+   [top.kzre.krro.core.core :as krro]
+   [top.kzre.krro.core.frame :as frame]
+   [top.kzre.krro.core.interactive :as i]
+   [top.kzre.krro.core.keymap :as km]
+   [top.kzre.krro.core.message :as msg]
+   [top.kzre.krro.core.mode :as mode]
+   [top.kzre.krro.core.project :as proj]
+   [top.kzre.krro.core.ui.protocol :as ui]
+   [top.kzre.krro.core.window :as win]
+   [top.kzre.krro.ui.core.protocol :as proto]
+   [top.kzre.krro.ui.javafx.factory :as factory]
+   [top.kzre.krro.ui.javafx.patcher :as patcher]
+   [top.kzre.krro.ui.javafx.plugin]
+   [top.kzre.krro.ui.javafx.renderer :as renderer]
+   [top.kzre.krro.ui.javafx.window])
   (:import
    (java.util Collection)
    [javafx.application Platform]
@@ -23,7 +24,7 @@
    [javafx.scene Scene]
    [javafx.scene.control ChoiceDialog Label TextInputDialog]
    (javafx.scene.input KeyEvent)
-   [javafx.scene.layout BorderPane VBox]
+   [javafx.scene.layout BorderPane]
    [javafx.stage Stage]))
 
 
@@ -188,7 +189,7 @@
                           (let [^KeyEvent ke e]
                             (when-not (.isConsumed ke)
                               (let [key-desc (key-event->key-desc ke)
-                                    keymaps (mode/keymaps frame/*current-frame*)]
+                                    keymaps (mode/keymaps (win/active-frame))]
                                 (try
                                   (km/handle-key! key-desc keymaps)
                                   (catch Exception ex
@@ -216,7 +217,7 @@
                                                   (patcher/->JavaFxNodePatcher))]
         ;; 先设置渲染器，再创建窗口（窗口创建时会自动激活 fundamental 模式，此时渲染器已就绪）
         (ui/set-renderer! krro-renderer)
-        (let [window (win/create-window! stage)
+        (let [window (krro/create-window! stage)
               initial-frame (win/current-frame window)]
           ;; 保留兼容 TODO 移除
           (alter-var-root #'frame/*current-frame* (constantly initial-frame))

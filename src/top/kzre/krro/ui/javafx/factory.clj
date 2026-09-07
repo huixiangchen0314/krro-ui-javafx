@@ -123,5 +123,5 @@
   (destroy-element [_ vnode f]
     (when-let [element (proto/node-element vnode)]
       (bind/unregister! element)   ;; 清除项目原子绑定
-      (when-let [fm (frame/param f renderer/frame-bind-manager-key)]
+      (when-let [fm (renderer/get-frame-bind-manager f)]
         (bind/unregister! fm element)))))

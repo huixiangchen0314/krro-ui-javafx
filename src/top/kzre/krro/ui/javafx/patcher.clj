@@ -19,9 +19,10 @@
 
 ;; ── 默认实现（任何 Parent 容器，安全处理非 Parent） ─────
 (defmethod append-node :default [parent child]
-  (if (instance? Parent parent)
-    (.add (get-children parent) child)
-    (throw (UnsupportedOperationException. (str "Cannot append to " (class parent))))))
+  (when (and parent child)
+    (if (instance? Parent parent)
+      (.add (get-children parent) child)
+      (throw (UnsupportedOperationException. (str "Cannot append to " (class parent)))))))
 (defmethod insert-node :default [parent child index]
   (if (instance? Parent parent)
     (.add (get-children parent) index child)
