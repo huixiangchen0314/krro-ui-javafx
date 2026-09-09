@@ -161,8 +161,8 @@
           spec)))
 
 
-;; ── 状态栏 ──────────────────────────────────────────────
-(defn- build-status-bar []
+;; ── minibuffer ──────────────────────────────────────────────
+(defn- minibuffer []
   (let [status-label (Label. "Ready")]
     (add-watch msg/messages :status-bar
                (fn [_ _ _ new-msgs]
@@ -195,7 +195,7 @@
                                   (catch Exception ex
                                     (.printStackTrace ex)))))))))
     ;; 将状态栏固定在底部
-    (.setBottom root (build-status-bar))
+    (.setBottom root (minibuffer))
     ;; 中心区域不预先创建，由渲染器接管
     (.setScene stage scene)
     (.setTitle stage title)

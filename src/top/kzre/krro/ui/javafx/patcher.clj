@@ -140,6 +140,21 @@
       (.remove items child)
       (.add items (min target-index (.size items)) child))))
 
+;; ── ScrollPane ──────────────────────────────────
+(defmethod append-node "javafx.scene.control.ScrollPane" [parent child]
+  (.setContent parent child))
+(defmethod insert-node "javafx.scene.control.ScrollPane" [parent child _index]
+  (.setContent parent child))
+(defmethod remove-node "javafx.scene.control.ScrollPane" [parent child]
+  (when (= (.getContent parent) child)
+    (.setContent parent nil)))
+(defmethod replace-node "javafx.scene.control.ScrollPane" [parent old new]
+  (when (= (.getContent parent) old)
+    (.setContent parent new)))
+(defmethod move-node "javafx.scene.control.ScrollPane" [parent _child _target-index]
+  ;; ScrollPane 只有一个内容节点，移动无意义，忽略
+  nil)
+
 ;; ═══════════════════════════════════════════════════════
 ;; 协议实现（仅包含 INodePatcher 定义的五个方法）
 ;; ═══════════════════════════════════════════════════════

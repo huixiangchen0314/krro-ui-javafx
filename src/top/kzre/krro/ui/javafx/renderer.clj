@@ -49,7 +49,7 @@
                  node)))
          ;; 分割节点
          (let [[direction _props & children-desc] layout-desc
-               ratios (window-layout/get-ratios layout-desc)  ; 返回 [r1 r2] 向量
+               ;ratios (window-layout/get-ratios layout-desc)  ; 返回 [r1 r2] 向量
                old-split (when (and fx-node (instance? SplitPane fx-node))
                            fx-node)
                new-split (let [s (or old-split (SplitPane.))
@@ -70,11 +70,11 @@
              (when-not (= current-items new-children)
                (.clear items)
                (.addAll items ^Collection new-children)))
-           ;; 设置分割位置
-           (let [current-positions (.getDividerPositions ^SplitPane new-split)
-                 new-positions (double-array ratios)]
-             (when-not (Arrays/equals current-positions new-positions)
-               (.setDividerPositions ^SplitPane new-split new-positions)))
+           ;; 设置分割位置 TODO 纳入核心状态数据管理
+           ;(let [current-positions (.getDividerPositions ^SplitPane new-split)
+           ;      new-positions (double-array ratios)]
+           ;  (when-not (Arrays/equals current-positions new-positions)
+           ;    (.setDividerPositions ^SplitPane new-split new-positions)))
            new-split)))]
     (let [native-win (win/native-window window)
           layout (win/layout-desc window)

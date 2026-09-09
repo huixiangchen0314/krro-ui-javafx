@@ -9,7 +9,7 @@
             [top.kzre.krro.ui.javafx.event :as event]
             [top.kzre.krro.ui.javafx.util :as javafx.util])
   (:import (java.util Collection)
-           (javafx.scene.control Button CheckBox ComboBox Hyperlink Label Menu MenuBar MenuItem ProgressBar RadioButton ScrollPane Separator Slider
+           (javafx.scene.control Button CheckBox ComboBox Hyperlink Label Menu MenuBar MenuItem ProgressBar RadioButton ScrollPane Separator SeparatorMenuItem Slider
                                  SplitPane TextArea TextField ToolBar)
            (javafx.scene.image ImageView)
            (javafx.scene.layout HBox VBox)))
@@ -81,6 +81,7 @@
         tk (target-key props)]
     (event/bind-action! item (update props :on-action resolve-action) tk)
     {:node item}))
+(defmethod create-element :menu-separator [_ _ _] {:node (SeparatorMenuItem.)})
 
 ;; ── 基础控件 ──────────────────────────────────────────
 (defmethod create-element :text [_ props _]
@@ -163,6 +164,8 @@
   {:node (ProgressBar. (double (or (:value props) 0)))})
 
 (defmethod create-element :separator [_ _ _] {:node (Separator.)})
+
+
 (defmethod create-element :image [_ props _] {:node (ImageView. ^String (or (:src props) ""))})
 
 
