@@ -10,9 +10,10 @@
    [top.kzre.krro.ui.core.bind :as bind]
    [top.kzre.krro.ui.core.core :as krro.ui]
    [top.kzre.krro.ui.core.diff :as diff]
-   [top.kzre.krro.ui.core.vnode :as vnode])
+   [top.kzre.krro.ui.core.vnode :as vnode]
+   [top.kzre.krro.ui.javafx.util :as javafx.util])
   (:import
-    (java.util Arrays Collection)
+   (java.util Arrays Collection)
    (javafx.application Platform)
    (javafx.geometry Orientation)
    (javafx.scene Node Parent)
@@ -20,24 +21,19 @@
    (javafx.scene.layout BorderPane StackPane)))
 
 (defonce ^:private frame-vnode-key        ::frame-vnode)
-(defonce ^:private frame-bind-manager-key ::frame-bind-manager)
+(defonce ^:private frame-bind-ctx-key ::bind-ctx)
 
 ;; frame-id -> fx-node 的映射
 (defonce ^:private frame-containers (atom {}))
 
-(defn ensure-frame-bind-manager [f]
-  (or (frame/param f frame-bind-manager-key)
-      (let [m (bind/create-bind-manager (frame/params-atom f))]
-        (frame/set-param! f frame-bind-manager-key m)
+(defn ensure-frame-bind-ctx [f]
+  (or (frame/param f frame-bind-ctx-key)
+      (let [m (bind/create (frame/params-atom f))]
+        (frame/set-param! f frame-bind-ctx-key m)
         m)))
 
 (defn get-frame-bind-manager [f]
-  (frame/param f frame-bind-manager-key))
-
-(defn kw->orient [kw]
-  (case kw
-    :horizontal Orientation/HORIZONTAL
-    :vertical Orientation/VERTICAL))
+  (frame/param f frame-bind-ctx-key))
 
 
 (defn- window-layout-diff!
@@ -49,13 +45,6 @@
          (let [fid (window-layout/frame-id layout-desc)]
            (or (get @frame-containers fid)
                (let [node (StackPane.)]
-                 (doto node
-                   (.setMaxWidth  Double/MAX_VALUE)
-                   (.setMaxHeight  Double/MAX_VALUE)
-                   (.setPrefWidth Double/MAX_VALUE)
-                   (.setPrefHeight Double/MAX_VALUE)
-                   (.setMinWidth  0)
-                   (.setMinHeight  0))
                  (swap! frame-containers assoc fid node)
                  node)))
          ;; 分割节点
@@ -64,14 +53,7 @@
                old-split (when (and fx-node (instance? SplitPane fx-node))
                            fx-node)
                new-split (let [s (or old-split (SplitPane.))
-                               o (kw->orient direction)]
-                           (doto s
-                             (.setMaxWidth Double/MAX_VALUE)
-                             (.setMaxHeight Double/MAX_VALUE)
-                             (.setPrefWidth Double/MAX_VALUE)
-                             (.setPrefHeight Double/MAX_VALUE)
-                             (.setMinWidth 0)
-                             (.setMinHeight 0))
+                               o (javafx.util/kw->orient direction)]
                            (when (not= o (.getOrientation s))
                              (.setOrientation s o))
                            s)
@@ -114,7 +96,7 @@
         (let [win (frame/window frame)
               content (window-layout-diff! win)]
           (log/debug "Rendering frame" (frame/frame-id frame) "into content node" content)
-          (ensure-frame-bind-manager frame)
+          (ensure-frame-bind-ctx frame)
           (let [frame-container (get @frame-containers (frame/frame-id frame))
                 new-vnode (vnode/edn->vnode ui-desc)
                 old-vnode (frame/param frame frame-vnode-key)]

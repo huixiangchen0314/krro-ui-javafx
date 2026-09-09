@@ -182,7 +182,7 @@
   (let [root (BorderPane.)
         scene (Scene. root (double width) (double height))
         stage (Stage.)]
-    (.add (.getStylesheets scene) "stylesheets/main.css")
+    ;(.add (.getStylesheets scene) "stylesheets/main.css")
     (.setOnKeyPressed scene
                       (reify EventHandler
                         (handle [_ e]

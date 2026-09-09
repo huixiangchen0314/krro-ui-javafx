@@ -5,16 +5,12 @@
    保留对 Krrō 命令系统的支持：若事件属性值为关键字，则自动作为命令 ID 执行。
    双向绑定通过 getter（单向同步）和 setter/on-change（用户操作写回）实现，
    不再使用 ObservableValue 自动监听，确保单向数据流。"
-  (:require [top.kzre.krro.core.command :as cmd]
-            [top.kzre.krro.core.frame :as frame]
-            [top.kzre.krro.core.project :as proj]
-            [top.kzre.krro.ui.core.vnode :as vnode]
-            [top.kzre.krro.ui.javafx.event :as event])
-  (:import (javafx.event EventHandler)
-           (javafx.geometry Orientation)
-           (javafx.scene.control Button CheckBox ColorPicker ComboBox Hyperlink Label ListView
-                                 Menu MenuBar MenuItem ProgressBar RadioButton ScrollPane Separator Slider
-                                 SplitPane Tab TabPane TextArea TextField ToolBar TreeView)
+  (:require [top.kzre.krro.core.core :as krro]
+            [top.kzre.krro.ui.javafx.event :as event]
+            [top.kzre.krro.ui.javafx.util :as javafx.util])
+  (:import (java.util Collection)
+           (javafx.scene.control Button CheckBox ComboBox Hyperlink Label Menu MenuBar MenuItem ProgressBar RadioButton ScrollPane Separator Slider
+                                 SplitPane TextArea TextField ToolBar)
            (javafx.scene.image ImageView)
            (javafx.scene.layout HBox VBox)))
 
@@ -32,27 +28,34 @@
     on-spec
 
     (keyword? on-spec)
-    (fn [_] (cmd/execute-command! on-spec))
+    (fn [_] (krro/exe-command! on-spec))
 
     (and (vector? on-spec) (keyword? (first on-spec)))
     (let [cmd-id (first on-spec)
           args   (rest on-spec)]
-      (fn [_] (apply cmd/execute-command! cmd-id args)))
+      (fn [_] (apply krro/exe-command! cmd-id args)))
 
     :else nil))
 
-(defn- mk-binding
-  "生成一个绑定描述 map。若 props 包含 :getter，则使用 getter；否则使用 project-binding / frame-param-binding 路径。"
-  [props apply-fn]
-  (if-let [getter (:getter props)]
-    [{:getter getter :apply-fn apply-fn}]
-    (let [proj-path (vnode/project-binding props)
-          frame-path (vnode/frame-param-binding props)]
-      (concat
-        (when proj-path [{:path proj-path :apply-fn apply-fn}])
-        (when frame-path [{:path frame-path :apply-fn apply-fn}])))))
 
-(defn- maybe-auto-on-change
+(defn- make-binding
+  "生成一个绑定描述 map。若 props 包含 :getter，则使用 getter；否则使用 project-binding / frame-param-binding 路径。"
+  [{:keys [getter bind bindf bind-ctx]} apply-fn]
+  (if getter
+    (let [b {:bind-ctx bind-ctx
+             :getter getter
+             :apply-fn apply-fn}]
+      {:binding b})
+    (if bind
+      {:binding {:bind-ctx bind-ctx
+                 :path bind
+                 :apply-fn apply-fn}}
+      (if bindf
+        {:frame-binding {:path bindf :apply-fn apply-fn}}
+        {}))))
+
+
+(defn- polyfill-action
   "如果 props 有 :setter 但没有 :on-change，则自动添加一个调用 setter 的 :on-change 回调。"
   [props]
   (if (and (:setter props) (not (:on-change props)))
@@ -61,21 +64,15 @@
 
 ;; ── 布局容器 ──────────────────────────────────────────
 (defmethod create-element :block [_ props _]
-  {:node (if (= (:direction props :vertical) :vertical) (VBox.) (HBox.))})
+  {:node (if (= (:direction props) :vertical) (VBox.) (HBox.))})
 
 (defmethod create-element :split [_ props _]
-  (let [direction (:direction props :horizontal)  ;; 默认水平
-        sp (SplitPane.)]
-    (.setOrientation sp
-                     (if (= direction :vertical)
-                       Orientation/VERTICAL
-                       Orientation/HORIZONTAL))
-    {:node sp}))
+  {:node (doto (SplitPane.)
+           (.setOrientation
+             (javafx.util/kw->orient (:direction props :horizontal))))})
 
 
 (defmethod create-element :scroll [_ _ _] {:node (ScrollPane.)})
-(defmethod create-element :tab-panel [_ _ _] {:node (TabPane.)})
-(defmethod create-element :tab [_ props _] {:node (Tab. (or (:title props) ""))})
 (defmethod create-element :tool-bar [_ _ _] {:node (ToolBar.)})
 (defmethod create-element :menu-bar [_ _ _] {:node (MenuBar.)})
 (defmethod create-element :menu [_ props _] {:node (Menu. (or (:content props) ""))})
@@ -91,8 +88,9 @@
         tk (target-key props)]
     (event/bind-click! lbl (update props :on-click resolve-action) tk)
     (event/bind-mouse-enter-leave! lbl props tk)
-    {:node lbl
-     :bindings (mk-binding props (fn [n v] (.setText ^Label n (str v))))}))
+    (merge
+      {:node lbl}
+      (make-binding props (fn [n v] (.setText ^Label n (str v)))))))
 
 (defmethod create-element :button [_ props _]
   (let [btn (Button. (or (:content props) ""))
@@ -103,62 +101,63 @@
     {:node btn}))
 
 (defmethod create-element :input [_ props f]
-  (let [props' (maybe-auto-on-change props)
+  (let [props' (polyfill-action props)
         tf (TextField. (or (:content props') ""))
         tk (target-key props')]
     (event/bind-change-action! tf props' tk)   ;; 用户按回车或失去焦点时触发
     (event/bind-key! tf props' tk)
     (event/bind-focus! tf props' tk)
-    {:node tf
-     :bindings (mk-binding props' (fn [n v] (.setText ^TextField n (str v))))}))
+    (merge {:node tf}
+           (make-binding props' (fn [n v] (.setText ^TextField n (str v)))))))
 
 (defmethod create-element :text-area [_ props f]
-  (let [props' (maybe-auto-on-change props)
+  (let [props' (polyfill-action props)
         ta (TextArea. (or (:content props') ""))
         tk (target-key props')]
     (event/bind-change-action! ta props' tk)
     (event/bind-key! ta props' tk)
     (event/bind-focus! ta props' tk)
-    {:node ta
-     :bindings (mk-binding props' (fn [n v] (.setText ^TextArea n (str v))))}))
+    (merge {:node ta}
+           (make-binding props' (fn [n v] (.setText ^TextArea n (str v))))
+      )))
 
 (defmethod create-element :check-box [_ props f]
-  (let [props' (maybe-auto-on-change props)
+  (let [props' (polyfill-action props)
         cb (CheckBox. (or (:content props') ""))
         tk (target-key props')]
     ;; 当不存在绑定时候，使用checked?属性.
     (when-not (and (:getter props')
                    (:bind props')
                    (:bindf props'))
-      (when-let [v (:checked? props')] (.setSelected cb (boolean v))))
+      (when-let [v (:checked props')] (.setSelected cb (boolean v))))
     (event/bind-change-action! cb props' tk)   ;; 用户点击复选框触发
     (event/bind-key! cb props' tk)
     (event/bind-mouse-enter-leave! cb props' tk)
-    {:node cb
-     :bindings (mk-binding props'
-                           (fn [c v]
-                             (.setSelected ^CheckBox c (boolean v))))}))
+    (merge {:node cb}
+      (make-binding props'
+                         (fn [c v]
+                           (.setSelected ^CheckBox c (boolean v)))))))
 
 (defmethod create-element :combo-box [_ props f]
-  (let [props' (maybe-auto-on-change props)
+  (let [props' (polyfill-action props)
         cb (ComboBox.)
         tk (target-key props')]
-    (when-let [items (:items props')] (.addAll (.getItems cb) items))
+    (when-let [items (:items props')] (.addAll ^Collection (.getItems cb) items))
     (when-let [val (:value props')] (.setValue cb val))
     (event/bind-change-action! cb props' tk)   ;; 用户选择新项时触发
     (event/bind-key! cb props' tk)
-    {:node cb
-     :bindings (mk-binding props' (fn [c v]
-                                    (.setValue ^ComboBox c v)))}))
+    (merge {:node cb}
+           (make-binding props' (fn [c v]
+                                  (.setValue ^ComboBox c v))))))
 
 (defmethod create-element :slider [_ props f]
-  (let [props' (maybe-auto-on-change props)
+  (let [props' (polyfill-action props)
         sl (Slider. (double (or (:min props') 0)) (double (or (:max props') 100)) (double (or (:value props') 50)))
         tk (target-key props')]
     (event/bind-change-action! sl props' tk)   ;; 用户拖动滑块触发
     (event/bind-key! sl props' tk)
-    {:node sl
-     :bindings (mk-binding props' (fn [s v] (.setValue ^Slider s (double v))))}))
+    (merge {:node sl}
+      (make-binding props' (fn [s v] (.setValue ^Slider s (double v)))))))
 
 (defmethod create-element :progress [_ props _]
   {:node (ProgressBar. (double (or (:value props) 0)))})
@@ -166,39 +165,17 @@
 (defmethod create-element :separator [_ _ _] {:node (Separator.)})
 (defmethod create-element :image [_ props _] {:node (ImageView. ^String (or (:src props) ""))})
 
-(defmethod create-element :list-view [_ props f]
-  (let [lv (ListView.)
-        tk (target-key props)
-        proj-path (vnode/project-binding props)
-        frame-path (vnode/frame-param-binding props)
-        mk-bind (fn [path] [{:path path :apply-fn (fn [l v]
-                                                    (when-let [items (:items v)]
-                                                      (.clear (.getItems ^ListView l))
-                                                      (.addAll (.getItems ^ListView l) items)))}])]
-    (when-let [items (:items props)] (.addAll (.getItems lv) items))
-    (when proj-path
-      (.setOnMouseClicked lv (reify EventHandler (handle [_ _]
-                                                   (when-let [selected (.. ^ListView lv getSelectionModel getSelectedItem)]
-                                                     (swap! proj/project assoc-in proj-path selected))))))
-    (when frame-path
-      (.setOnMouseClicked lv (reify EventHandler (handle [_ _]
-                                                   (when-let [selected (.. ^ListView lv getSelectionModel getSelectedItem)]
-                                                     (swap! (frame/params-atom f) assoc-in frame-path selected))))))
-    {:node lv
-     :bindings (when proj-path (mk-bind proj-path))
-     :frame-bindings (when frame-path (mk-bind frame-path))}))
-
-(defmethod create-element :tree-view [_ _ _] {:node (TreeView.)})
 
 (defmethod create-element :radio-button [_ props f]
-  (let [props' (maybe-auto-on-change props)
+  (let [props' (polyfill-action props)
         rb (RadioButton. (or (:content props') ""))
         tk (target-key props')]
-    (when-let [v (:checked? props')] (.setSelected rb (boolean v)))
+    (when-let [v (:checked props')] (.setSelected rb (boolean v)))
     (event/bind-change-action! rb props' tk)
     (event/bind-key! rb props' tk)
-    {:node rb
-     :bindings (mk-binding props' (fn [r v] (.setSelected ^RadioButton r (boolean v))))}))
+    (merge {:node rb}
+           (make-binding props' (fn [r v] (.setSelected ^RadioButton r (boolean v))))
+           )))
 
 (defmethod create-element :link [_ props _]
   (let [hl (Hyperlink. (or (:content props) ""))
@@ -206,10 +183,3 @@
     (event/bind-click! hl (update props :on-click resolve-action) tk)
     (event/bind-action! hl (update props :on-action resolve-action) tk)
     {:node hl}))
-
-(defmethod create-element :color-picker [_ _ _] {:node (ColorPicker.)})
-
-;; TODO shadow dom
-
-(defmethod create-element :default [tag _ _]
-  {:node (Label. (str "(unknown: " tag ")"))})
