@@ -79,62 +79,38 @@
    :old-value old
    :new-value new})
 
-(defn bind-change-action!
-  "绑定变更事件。使用属性监听实现实时反馈（如 Slider、TextField、CheckBox 等），
-   回调会收到包含 :type :change, :target, :timestamp, :old-value, :new-value 的 map。
-   程序修改控件值也会触发事件（因为监听了属性变化），但通过回调中的 `old-value` 和 `new-value` 可以识别程序修改。
-   为了保持单向数据流，建议在回调中只读数据，不直接修改控件值。"
-  [^Node node props target-key]
-  (when-let [f (:on-change props)]
-    (let [observable (cond
-                       (instance? TextInputControl node) (.textProperty ^TextInputControl node)
-                       (instance? Slider node)    (.valueProperty ^Slider node)
-                       (instance? CheckBox node)  (.selectedProperty ^CheckBox node)
-                       (instance? RadioButton node) (.selectedProperty ^RadioButton node)
-                       (instance? ComboBox node)  (.valueProperty ^ComboBox node)
-                       :else nil)]
-      (when observable
-        ;; 移除旧监听器
-        (when-let [old-listener (.getUserData node)]
-          (.removeListener observable ^ChangeListener old-listener))
-        ;; 创建并添加新监听器
-        (let [listener (reify ChangeListener
-                         (changed [_ _ old-value new-value]
-                           (f (make-change-event target-key old-value new-value))))]
-          (.addListener observable listener)
-          (.setUserData node listener)))))
-  nil)
 
 ;
-;(defn bind-change-action!
-;  "绑定 ActionEvent 作为变更事件。仅当用户交互（如点击、回车、拖动）触发。
-;   程序修改控件值不会触发此事件，从而保持单向数据流。
-;   回调会收到包含 :type :change, :target, :timestamp, :old-value, :new-value 的 map。"
-;  [node props target-key]
-;  (when-let [ f (:on-change props)]
-;    (cond
-;      (or (instance? CheckBox node)
-;          (instance? RadioButton node))
-;      (.setOnAction node
-;                    (reify EventHandler
-;                      (handle [_ e]
-;                        (let [new-val
-;                              (cond
-;                                (instance? CheckBox node) (.isSelected ^CheckBox node))]
-;                          (f (make-change-event target-key nil new-val))))))
-;      :else
-;      (let [observable
-;            (cond
-;              (instance? TextInputControl node) (.textProperty ^TextInputControl node)
-;              (instance? Slider node) (.valueProperty ^Slider node)
-;              (instance? CheckBox node) (.selectedProperty ^CheckBox node)
-;              (instance? ComboBox node) (.valueProperty ^ComboBox node)
-;              (instance? ToggleButton node) (.selectedProperty ^ToggleButton node))]
-;
-;        (.subscribe observable
-;                    (reify BiConsumer
-;                      (accept [_ old-value new-value]
-;                        (f (make-change-event target-key old-value new-value)))))))))
+(defn bind-change-action!
+  "绑定 ActionEvent 作为变更事件。仅当用户交互（如点击、回车、拖动）触发。
+   程序修改控件值不会触发此事件，从而保持单向数据流。
+   回调会收到包含 :type :change, :target, :timestamp, :old-value, :new-value 的 map。"
+  [node props target-key]
+  (when-let [ f (:on-change props)]
+    (cond
+      (or (instance? CheckBox node)
+          (instance? RadioButton node))
+      (.setOnAction node
+                    (reify EventHandler
+                      (handle [_ e]
+                        (let [new-val
+                              (cond
+                                (instance? CheckBox node) (.isSelected ^CheckBox node))]
+                          (f (make-change-event target-key nil new-val))))))
+      :else
+      (let [observable
+            (cond
+              (instance? TextInputControl node) (.textProperty ^TextInputControl node)
+              (instance? Slider node) (.valueProperty ^Slider node)
+              (instance? CheckBox node) (.selectedProperty ^CheckBox node)
+              (instance? ComboBox node) (.valueProperty ^ComboBox node)
+              (instance? ToggleButton node) (.selectedProperty ^ToggleButton node))]
+
+        (.subscribe observable
+                    (reify BiConsumer
+                      (accept [_ old-value new-value]
+                        (f (make-change-event target-key old-value new-value)))))))))
+
 ;; 以下函数保持不变
 (defn bind-focus!
   [^Node node props target-key]
