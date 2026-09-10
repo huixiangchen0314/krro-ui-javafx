@@ -1,22 +1,24 @@
 (ns top.kzre.krro.ui.javafx.core
   "Krrō JavaFX 入口，管理窗口、交互器、状态栏、渲染器和 Frame。"
   (:require
-   [clojure.string :as str]
-   [top.kzre.krro.core.core :as krro]
-   [top.kzre.krro.core.frame :as frame]
-   [top.kzre.krro.core.interactive :as i]
-   [top.kzre.krro.core.keymap :as km]
-   [top.kzre.krro.core.message :as msg]
-   [top.kzre.krro.core.mode :as mode]
-   [top.kzre.krro.core.project :as proj]
-   [top.kzre.krro.core.ui.protocol :as ui]
-   [top.kzre.krro.core.window :as win]
-   [top.kzre.krro.ui.core.protocol :as proto]
-   [top.kzre.krro.ui.javafx.factory :as factory]
-   [top.kzre.krro.ui.javafx.patcher :as patcher]
-   [top.kzre.krro.ui.javafx.plugin]
-   [top.kzre.krro.ui.javafx.renderer :as renderer]
-   [top.kzre.krro.ui.javafx.window])
+    [clojure.string :as str]
+    [top.kzre.krro.core.core :as krro]
+    [top.kzre.krro.core.frame :as frame]
+    [top.kzre.krro.core.interactive :as i]
+    [top.kzre.krro.core.keymap :as km]
+    [top.kzre.krro.core.message :as msg]
+    [top.kzre.krro.core.mode :as mode]
+    [top.kzre.krro.core.project :as proj]
+    [top.kzre.krro.core.ui.protocol :as ui]
+    [top.kzre.krro.core.window :as win]
+    [top.kzre.krro.ui.core.protocol :as proto]
+    [top.kzre.krro.ui.javafx.factory :as factory]
+    [top.kzre.krro.ui.javafx.patcher :as patcher]
+    [top.kzre.krro.ui.javafx.plugin]
+    [top.kzre.krro.ui.javafx.renderer :as renderer]
+    [top.kzre.krro.ui.javafx.tags :as tags]
+    [top.kzre.krro.ui.javafx.util :as javafx.util]
+    [top.kzre.krro.ui.javafx.window])
   (:import
    (java.util Collection)
    [javafx.application Platform]
@@ -27,6 +29,9 @@
    [javafx.scene.layout BorderPane]
    [javafx.stage Stage]))
 
+(def throttled javafx.util/throttled)
+(def debounced javafx.util/debounced)
+
 
 (defn make-component
   "创建一个组件工厂函数。
@@ -35,7 +40,7 @@
    init-fn       - (fn [node props frame] ...) 返回清理函数，每次 props 变化时调用。
                   首次挂载时也会调用，用于初始化组件内部运行时。
    返回一个组件函数，可注册为虚拟 DOM 标签。"
-  [watched-props create-fn init-fn]
+  [watched-props create-fn init-fn & {:keys [bind]}]
   (fn [props frame]
     (let [node (create-fn)                       ;; 创建根节点（仅一次）
           cleanup-atom (atom (fn []))
@@ -44,15 +49,17 @@
                    (reset! cleanup-atom cleanup)))
           update (fn [old-p p f] (init-fn node old-p p f))]
       (init nil props frame)                         ;; 首次初始化
-      {:node node
-       :on-update (fn [_element old-vnode new-vnode]
-                    (let [old-props (proto/node-props old-vnode)
-                          new-props (proto/node-props new-vnode)]
-                      (when (not= (select-keys old-props watched-props)
-                                  (select-keys new-props watched-props))
-                        (@cleanup-atom)           ;; 清理旧运行时
-                        (update old-props new-props frame)))) ;; 重新初始化
-       :on-unmount (fn [_ _] (@cleanup-atom))})))
+      (merge
+        {:node node
+         :on-update (fn [_element old-vnode new-vnode]
+                      (let [old-props (proto/node-props old-vnode)
+                            new-props (proto/node-props new-vnode)]
+                        (when (not= (select-keys old-props watched-props)
+                                    (select-keys new-props watched-props))
+                          (@cleanup-atom)           ;; 清理旧运行时
+                          (update old-props new-props frame)))) ;; 重新初始化
+         :on-unmount (fn [_ _] (@cleanup-atom))}
+        (tags/make-binding props bind)))))
 
 (defn- key-event->key-desc
   "将 JavaFX KeyEvent 转换为 Emacs 风格的键描述字符串，例如 'C-x', 'C-S-d', 'RET'。"
@@ -182,7 +189,6 @@
   (let [root (BorderPane.)
         scene (Scene. root (double width) (double height))
         stage (Stage.)]
-    ;(.add (.getStylesheets scene) "stylesheets/main.css")
     (.setOnKeyPressed scene
                       (reify EventHandler
                         (handle [_ e]
@@ -194,6 +200,17 @@
                                   (km/handle-key! key-desc keymaps)
                                   (catch Exception ex
                                     (.printStackTrace ex)))))))))
+    ;(.addEventFilter scene KeyEvent/KEY_PRESSED
+    ;                 (reify EventHandler
+    ;                   (handle [_ e]
+    ;                     (let [^KeyEvent ke e]
+    ;                       (when-not (.isConsumed ke)
+    ;                         (let [key-desc (key-event->key-desc ke)
+    ;                               keymaps (mode/keymaps (win/active-frame))]
+    ;                           (try
+    ;                             (km/handle-key! key-desc keymaps)
+    ;                             (catch Exception ex
+    ;                               (.printStackTrace ex)))))))))
     ;; 将状态栏固定在底部
     (.setBottom root (minibuffer))
     ;; 中心区域不预先创建，由渲染器接管

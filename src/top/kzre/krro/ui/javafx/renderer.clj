@@ -11,7 +11,8 @@
    [top.kzre.krro.ui.core.core :as krro.ui]
    [top.kzre.krro.ui.core.diff :as diff]
    [top.kzre.krro.ui.core.vnode :as vnode]
-   [top.kzre.krro.ui.javafx.util :as javafx.util])
+   [top.kzre.krro.ui.javafx.util :as javafx.util]
+   [top.kzre.krro.core.core :as krro])
   (:import
    (java.util Arrays Collection)
    (javafx.application Platform)
@@ -32,7 +33,7 @@
         (frame/set-param! f frame-bind-ctx-key m)
         m)))
 
-(defn get-frame-bind-manager [f]
+(defn get-frame-bind-ctx [f]
   (frame/param f frame-bind-ctx-key))
 
 
@@ -53,7 +54,7 @@
                old-split (when (and fx-node (instance? SplitPane fx-node))
                            fx-node)
                new-split (let [s (or old-split (SplitPane.))
-                               o (javafx.util/kw->orient direction)]
+                               o (javafx.util/kw->orientation direction)]
                            (when (not= o (.getOrientation s))
                              (.setOrientation s o))
                            s)
@@ -63,7 +64,8 @@
                new-children (mapv (fn [child-layout old-child]
                                     (diff! child-layout old-child))
                                   children-desc
-                                  (concat old-item-v (repeat nil)))]
+                                  ;; 和 children-desc 的长度对齐
+                                  (krro/take-padded (count children-desc) old-item-v))]
            ;; 校验引用不同，并更新子项列表
            (let [items (.getItems ^SplitPane new-split)
                  current-items (vec items)]

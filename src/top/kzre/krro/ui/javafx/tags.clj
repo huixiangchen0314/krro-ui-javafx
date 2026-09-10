@@ -10,7 +10,7 @@
             [top.kzre.krro.ui.javafx.util :as javafx.util])
   (:import (java.util Collection)
            (javafx.scene.control Button CheckBox ComboBox Hyperlink Label Menu MenuBar MenuItem ProgressBar RadioButton ScrollPane Separator SeparatorMenuItem Slider
-                                 SplitPane TextArea TextField ToolBar)
+                                 SplitPane SplitPane$Divider TextArea TextField ToolBar)
            (javafx.scene.image ImageView)
            (javafx.scene.layout HBox VBox)))
 
@@ -38,7 +38,7 @@
     :else nil))
 
 
-(defn- make-binding
+(defn make-binding
   "生成一个绑定描述 map。若 props 包含 :getter，则使用 getter；否则使用 project-binding / frame-param-binding 路径。"
   [{:keys [getter bind bindf bind-ctx]} apply-fn]
   (if getter
@@ -63,13 +63,15 @@
     props))
 
 ;; ── 布局容器 ──────────────────────────────────────────
-(defmethod create-element :block [_ props _]
-  {:node (if (= (:direction props) :vertical) (VBox.) (HBox.))})
+(defmethod create-element :block [_ {:keys [direction]
+                                     :or {direction :horizontal}} _]
+
+  {:node (if (= direction :vertical) (VBox.) (HBox.))})
 
 (defmethod create-element :split [_ props _]
   {:node (doto (SplitPane.)
            (.setOrientation
-             (javafx.util/kw->orient (:direction props :horizontal))))})
+             (javafx.util/kw->orientation (:direction props :horizontal))))})
 
 
 (defmethod create-element :scroll [_ _ _] {:node (ScrollPane.)})

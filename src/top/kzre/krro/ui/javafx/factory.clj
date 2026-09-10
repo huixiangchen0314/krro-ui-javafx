@@ -29,7 +29,7 @@
       TextArea
       TextField)
     [javafx.scene.image ImageView]
-    [javafx.scene.layout HBox VBox]))
+    [javafx.scene.layout HBox Priority VBox]))
 
 ;; ── 通用属性处理 ──────────────────────────────────────
 (defn- set-style [^Node node style-map]
@@ -56,6 +56,15 @@
   (when (not= (:class old-props) (:class new-props))
     (.clear (.getStyleClass element))
     (set-class element (:class new-props)))
+
+  (let [grow (:grow new-props)]
+    (when (not= grow (:grow old-props) )
+      (if grow
+        (do (HBox/setHgrow element Priority/ALWAYS)
+            (VBox/setVgrow element Priority/ALWAYS))
+        (do (HBox/setHgrow element Priority/NEVER)
+            (VBox/setVgrow element Priority/NEVER)))))
+
 
   ;; 样式表
   ;; 样式表：仅对 Parent 类型节点生效
@@ -212,6 +221,11 @@
        )))
   (destroy-element [_ vnode f]
     (when-let [element (proto/node-element vnode)]
-      (bind/unregister! element)   ;; 清除项目原子绑定
-      (when-let [fm (renderer/get-frame-bind-manager f)]
-        (bind/unregister! fm element)))))
+      ;; 清除项目原子绑定
+      (bind/unregister! element)
+      ;; 清楚frame状态绑定
+      (when-let [ctx (renderer/get-frame-bind-ctx f)]
+        (bind/unregister! ctx element))
+      ;; 清楚本地状态绑定
+      (when-let [ctx (:bind-ctx (proto/node-props vnode))]
+        (bind/unregister! ctx element)))))

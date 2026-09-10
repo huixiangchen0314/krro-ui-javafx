@@ -3,6 +3,7 @@
   (:require [top.kzre.krro.core.plugin :as plugin :refer [defplugin]]
             [top.kzre.krro.ui.javafx.tags :as tags]))
 
+;; deprecated
 (defplugin :krro.plugin/javafx-tag [tag handler]
                       "注册一个新的 JavaFX UI 标签。
                        tag 为标签关键字，handler 为 (fn [props context] -> javafx.scene.Node)。
@@ -14,3 +15,17 @@
                           :handler (fn [props ] ...)})"
                       (defmethod tags/create-element tag [_ props frame]
                         (handler props frame)))
+
+
+;; handler 仅用于兼容
+(defplugin :krro.ui.javafx/tag [tag factory handler]
+           "注册一个新的 JavaFX UI 标签。
+            tag 为标签关键字，handler 为 (fn [props context] -> javafx.scene.Node)。
+            示例:
+            (plugin/register-plugin!
+              {:name :my-plugin/widget
+               :type :krro.plugin/javafx-tag
+               :tag :my-widget
+               :handler (fn [props ] ...)})"
+           (defmethod tags/create-element tag [_ props frame]
+             ((or factory handler) props frame)))
