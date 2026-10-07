@@ -66,7 +66,6 @@
             (VBox/setVgrow element Priority/NEVER)))))
 
 
-  ;; 样式表
   ;; 样式表：仅对 Parent 类型节点生效
   (when (and (instance? Parent element)
              (not= (:stylesheet old-props) (:stylesheet new-props)))

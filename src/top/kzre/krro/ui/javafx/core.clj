@@ -10,6 +10,7 @@
     [top.kzre.krro.core.mode :as mode]
     [top.kzre.krro.core.project :as proj]
     [top.kzre.krro.core.ui.protocol :as ui]
+    [top.kzre.krro.core.util.re-export :refer [re-export]]
     [top.kzre.krro.core.window :as win]
     [top.kzre.krro.ui.core.protocol :as proto]
     [top.kzre.krro.ui.javafx.factory :as factory]
@@ -17,7 +18,7 @@
     [top.kzre.krro.ui.javafx.plugin]
     [top.kzre.krro.ui.javafx.renderer :as renderer]
     [top.kzre.krro.ui.javafx.tags :as tags]
-    [top.kzre.krro.ui.javafx.util :as javafx.util]
+    [top.kzre.krro.ui.javafx.util]
     [top.kzre.krro.ui.javafx.window])
   (:import
    (java.util Collection)
@@ -29,8 +30,9 @@
    [javafx.scene.layout BorderPane]
    [javafx.stage Stage]))
 
-(def throttled javafx.util/throttled)
-(def debounced javafx.util/debounced)
+(re-export
+  [top.kzre.krro.ui.javafx.util
+   :refer [throttled debounced]])
 
 
 (defn make-component
