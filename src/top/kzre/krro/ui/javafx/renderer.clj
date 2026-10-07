@@ -4,6 +4,7 @@
   (:require
     [taoensso.timbre :as log]
     [top.kzre.krro.core.frame :as frame]
+    [top.kzre.krro.core.hook :as hook]
     [top.kzre.krro.core.ui.protocol :as ui]
     [top.kzre.krro.core.window :as win :refer [native-object]]
     [top.kzre.krro.core.window-layout :as window-layout]
@@ -17,16 +18,24 @@
     (java.util Collection)
     (javafx.application Platform)
     (javafx.beans.value ChangeListener)
+    (javafx.event EventHandler)
     (javafx.scene Node Parent)
     (javafx.scene.control SplitPane SplitPane$Divider)
+    (javafx.scene.input MouseEvent)
     (javafx.scene.layout BorderPane StackPane)))
 
 (defonce ^:private frame-vnode-key    ::frame-vnode)
 (defonce ^:private frame-bind-ctx-key ::bind-ctx)
 (def ^:private split-path-key         ::split-path)
 (def ^:private attached-divider-key   ::attached-divider)
+(def ^:private frame-click-handler-key ::frame-click-handler)
 
 (def ^:private pos-eps              1e-6)
+
+;; ── 活动 frame 高亮样式 ───────────────────────────────
+(def ^:private frame-border-width 2)
+(def ^:private frame-border-selected-color   "#4a90d9")
+(def ^:private frame-border-unselected-color "transparent")
 
 ;; frame-id -> fx-node 的映射
 (defonce ^:private frame-containers (atom {}))
@@ -39,6 +48,54 @@
 
 (defn get-frame-bind-ctx [f]
   (frame/param f frame-bind-ctx-key))
+
+
+;; ── 活动 frame 高亮 ──────────────────────────────────
+
+(defn- apply-frame-style!
+  "给 frame 容器节点设置边框样式。
+   选中/未选中使用相同 border-width，避免切换焦点时子节点布局位移。"
+  [^Node node selected?]
+  (.setStyle node
+             (str "-fx-border-width: " frame-border-width "px;"
+                  "-fx-border-style: solid;"
+                  "-fx-border-color: "
+                  (if selected?
+                    frame-border-selected-color
+                    frame-border-unselected-color)
+                  ";")))
+
+(defn- refresh-frame-styles!
+  "刷新 window 中所有 frame 容器的高亮样式。
+   只在 JavaFX Application Thread 调用。"
+  [window]
+  (let [selected-id (some-> (win/current-frame window) frame/frame-id)]
+    (doseq [f (win/frames window)]
+      (let [fid       (frame/frame-id f)
+            ^Node node (get @frame-containers fid)]
+        (when node
+          (apply-frame-style! node (= fid selected-id)))))))
+
+
+;; ── 点击切焦点 ───────────────────────────────────────
+
+(defn- attach-frame-click-listener!
+  "在 frame 容器的捕获阶段挂鼠标按下监听。
+   点击 frame 内任意位置（包括子组件）都会把该 frame 设为 current frame。
+   不 consume 事件，子组件仍能正常处理鼠标事件。
+   重复调用安全：旧的 handler 会先被移除。"
+  [^StackPane node window fid]
+  (when-let [^EventHandler old (.get (.getProperties node) frame-click-handler-key)]
+    (.removeEventFilter node MouseEvent/MOUSE_PRESSED old))
+  (let [handler (reify EventHandler
+                  (handle [_ _]
+                    (let [current-id (some-> (win/current-frame window) frame/frame-id)]
+                      (when (not= fid current-id)
+                        ;; set-current-frame! 会触发 current-frame-changed-hook，
+                        ;; 由 hook 负责刷新样式。
+                        (win/set-current-frame! window fid)))))]
+    (.put (.getProperties node) frame-click-handler-key handler)
+    (.addEventFilter node MouseEvent/MOUSE_PRESSED handler)))
 
 
 ;; ── ratio 同步辅助 ────────────────────────────────────
@@ -56,32 +113,7 @@
                       pos-eps))
                  (range n)))))
 
-(defn- invalidate-aabbs
-  "清掉树上所有 :aabb，强制下次 frame-aabb 重算。"
-  [layout]
-  (window-layout/prewalk
-    layout
-    (fn [node]
-      (if (window-layout/split? node)
-        (update node 1 dissoc :aabb)
-        node))))
-
-(defn- window-set-ratio!
-  "把用户拖动后的第一个子节点占比写回 layout。
-   path 是 split 节点在 layout-desc 中的路径，其 props 位于 (conj path 1)。"
-  [window path r]
-  (when (and (number? r) (< 0 r 1))
-    (swap! (:layout-atom window)
-           (fn [layout]
-             (-> layout
-                 (update-in (conj path 1) assoc :ratio (double r))
-                 invalidate-aabbs)))))
-
 (defn- attach-divider-listeners!
-  "给 SplitPane 的 divider 挂位置监听。
-   SplitPane$Divider 不继承 Node，没有 getProperties()，所以标记存在 SplitPane 自身。
-   二叉树只有一个 divider；当 items 变化时 JavaFX 会重建 divider 实例，
-   用 identical? 判断实例是否换过，换过才重挂，避免重复挂监听。"
   [^SplitPane sp window path]
   (.put (.getProperties sp) split-path-key [window path])
   (when-let [^SplitPane$Divider d (first (.getDividers sp))]
@@ -94,8 +126,7 @@
                           (when-let [[w p] (.get (.getProperties sp) split-path-key)]
                             (let [positions (vec (.getDividerPositions sp))]
                               (when (seq positions)
-                                ;; 两叉时只有一个 divider，其位置就是第一个子节点占比
-                                (window-set-ratio! w p (first positions))))))))))))
+                                (win/set-split-ratio! w p (first positions))))))))))))
 
 
 ;; ── 布局 diff ────────────────────────────────────────
@@ -106,11 +137,13 @@
     [(diff! [layout-desc fx-node path]
        (if (window-layout/leaf? layout-desc)
          ;; 叶子节点：尝试从 frame-containers 缓存获取，否则创建新的 StackPane
-         (let [fid (window-layout/frame-id layout-desc)]
-           (or (get @frame-containers fid)
-               (let [node (StackPane.)]
-                 (swap! frame-containers assoc fid node)
-                 node)))
+         (let [fid (window-layout/frame-id layout-desc)
+               node (or (get @frame-containers fid)
+                        (let [n (StackPane.)]
+                          (swap! frame-containers assoc fid n)
+                          n))]
+           (attach-frame-click-listener! node window fid)
+           node)
          ;; 分割节点
          (let [[direction _props & children-desc] layout-desc
                old-split (when (and fx-node (instance? SplitPane fx-node))
@@ -153,6 +186,9 @@
       (log/debug "Syncing window layout, layout:" layout)
       (let [new-content (diff! layout content [])]
         (.setCenter ^BorderPane root new-content)
+        ;; 兜底刷新：初始化、结构变化后保证样式正确
+        ;; （hook 只在 current-frame 变化时触发，覆盖不到初始创建等场景）
+        (refresh-frame-styles! window)
         new-content))))
 
 
@@ -186,5 +222,23 @@
                 (.remove (.getChildren p) container))
               (swap! frame-containers dissoc frame-id))))))))
 
+
+;; ── Hook 注册 ────────────────────────────────────────
+
+(defonce ^:private current-frame-hook-registered? (atom false))
+
+(defn- on-current-frame-changed
+  "current-frame-changed-hook 回调。
+   set-current-frame! 可能从任意线程触发（命令、脚本），
+   所有 UI 操作必须调度回 JavaFX Application Thread。"
+  [window _old-frame-id _new-frame-id]
+  (Platform/runLater
+    (fn []
+      (refresh-frame-styles! window))))
+
 (defn make-renderer [factory node-renderer]
+  ;; 幂等注册：一个进程内只挂一次，避免重复调用 make-renderer 时累积 hook
+  (when (compare-and-set! current-frame-hook-registered? false true)
+    (hook/add-hook! :krro.core/current-frame-changed-hook
+                    on-current-frame-changed))
   (JavaFxRenderer. factory node-renderer))
